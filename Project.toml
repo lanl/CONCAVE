@@ -2,3 +2,7 @@ name = "CONCAVE"
 uuid = "98d2d2b5-8403-4422-8025-893b8d3329e1"
 authors = ["Scott Lawrence <srlawrence@lanl.gov>"]
 version = "0.1.0"
+
+[deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

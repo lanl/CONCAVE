@@ -1,0 +1,2 @@
+module Algebra
+end
