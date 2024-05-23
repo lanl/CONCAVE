@@ -1,0 +1,3 @@
+#!/bin/sh
+
+exec julia --project='.' -e 'using Pkg; Pkg.test()'

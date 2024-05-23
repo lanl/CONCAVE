@@ -1,4 +1,4 @@
 #!/bin/sh
 
-julia --project=. src/solve.jl $*
+exec julia --project=. src/solve.jl $*
 
