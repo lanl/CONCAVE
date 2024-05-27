@@ -149,4 +149,28 @@ function MajoranaAlgebra()
     return Operator(Majorana(false)), Operator(Majorana(true))
 end
 
+function ==(γ1::Majorana, γ2::Majorana)::Bool
+    return γ1.γ == γ2.γ
+end
+
+function hash(γ::Majorana, h::UInt)::UInt
+    return hash(γ.γ, h)
+end
+
+function copy(γ::Majorana)::Majorana
+    return Majorana(γ.γ)
+end
+
+function one(::Type{Majorana})::Majorana
+    return Majorana(false)
+end
+
+function adjoint(γ::Majorana)::Majorana
+    return copy(γ)
+end
+
+function *(γ1::Majorana, γ2::Majorana)::Majorana
+    # TODO
+end
+
 end
