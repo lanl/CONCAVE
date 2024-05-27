@@ -263,6 +263,29 @@ function FermionAlgebra()
     return Operator(Fermion(false,false)), Operator(Fermion(false,true))
 end
 
+function ==(a::Fermion, b::Fermion)
+    return a.cr == b.cr && a.an == b.an
+end
+
+function hash(a::Fermion, h::UInt)
+    return hash((a.cr, a.an), h)
+end
+
+function copy(a::Fermion)::Fermion
+    return Fermion(a.cr, a.an)
+end
+
+function one(::Type{Fermion})
+    return Fermion(0,0)
+end
+
+function adjoint(a::Fermion)::Fermion
+    return Fermion(a.an, a.cr)
+end
+
+function *(a::Fermion, b::Fermion)::FermionOperator
+end
+
 struct Boson <: Basis
     cr::Int
     an::Int
