@@ -16,6 +16,13 @@ end
 
 @testset "Pauli" begin
     I,X,Y,Z = PauliAlgebra()
+    @test I*I ≈ I
+    @test I*X ≈ X
+    @test I*Y ≈ Y
+    @test I*Z ≈ Z
+    @test X*Y ≈ 1im*Z
+    @test Y*Z ≈ -Z*Y
+    @test Y*Y ≈ I
 end
 
 @testset "Fermion" begin

@@ -227,8 +227,29 @@ function adjoint(a::Pauli)::Pauli
     return copy(a)
 end
 
-function *(a::Pauli, b::Pauli)::Pauli
-    # TODO
+function *(a::Pauli, b::Pauli)::PauliOperator
+    if a.p == 'I'
+        return Operator(b)
+    elseif b.p == 'I'
+        return Operator(a)
+    end
+    if a.p == b.p
+        return Operator(Pauli('I'))
+    end
+    if a.p == 'X' && b.p == 'Y'
+        return 1im * Operator(Pauli('Z'))
+    elseif a.p == 'Y' && b.p == 'Z'
+        return 1im * Operator(Pauli('X'))
+    elseif a.p == 'Z' && b.p == 'X'
+        return 1im * Operator(Pauli('Y'))
+    end
+    if a.p == 'Y' && b.p == 'X'
+        return -1im * Operator(Pauli('Z'))
+    elseif a.p == 'Z' && b.p == 'Y'
+        return -1im * Operator(Pauli('X'))
+    elseif a.p == 'X' && b.p == 'Z'
+        return -1im * Operator(Pauli('Y'))
+    end
 end
 
 struct Fermion <: Basis
