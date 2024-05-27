@@ -15,12 +15,15 @@ using CONCAVE
 end
 
 @testset "Pauli" begin
+    I,X,Y,Z = PauliAlgebra()
 end
 
 @testset "Fermion" begin
+    I,c = FermionAlgebra()
 end
 
 @testset "Boson" begin
+    I,a = BosonAlgebra()
 end
 
 @testset "Wick" begin

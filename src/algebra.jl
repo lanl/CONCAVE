@@ -15,6 +15,9 @@ import Base: setindex!, getindex
 
 export Operator
 export Majorana, MajoranaAlgebra
+export Pauli, PauliAlgebra
+export Fermion, FermionAlgebra
+export Boson, BosonAlgebra
 
 abstract type Basis end
 
@@ -193,5 +196,66 @@ end
 function *(γ1::Majorana, γ2::Majorana)::MajoranaOperator
     return Operator(Majorana(γ1.γ ⊻ γ2.γ))
 end
+
+struct Pauli <: Basis
+    p::Char
+end
+
+PauliOperator = Operator{Pauli}
+
+function PauliAlgebra()
+    return Operator(Pauli('I')), Operator(Pauli('X')), Operator(Pauli('Y')), Operator(Pauli('Z'))
+end
+
+function ==(a::Pauli, b::Pauli)
+    return a.p == b.p
+end
+
+function hash(a::Pauli, h::UInt)::UInt
+    return hash(a.p, h)
+end
+
+function copy(a::Pauli)::Pauli
+    return Pauli(a.p)
+end
+
+function one(::Type{Pauli})
+    return Pauli('I')
+end
+
+function adjoint(a::Pauli)::Pauli
+    return copy(a)
+end
+
+function *(a::Pauli, b::Pauli)::Pauli
+    # TODO
+end
+
+struct Fermion <: Basis
+    cr::Bool
+    an::Bool
+end
+
+FermionOperator = Operator{Fermion}
+
+function FermionAlgebra()
+    return Operator(Fermion(false,false)), Operator(Fermion(false,true))
+end
+
+struct Boson <: Basis
+    cr::Int
+    an::Int
+end
+
+BosonOperator = Operator{Boson}
+
+function BosonAlgebra()
+    return Operator(Boson(0,0)), Operator(Boson(0,1))
+end
+
+struct Wick <: Basis
+end
+
+WickOperator = Operator{Wick}
 
 end

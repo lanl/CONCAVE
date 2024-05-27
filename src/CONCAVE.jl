@@ -4,6 +4,9 @@ export ConvexProgram, SemidefiniteProgram, DenseSDP
 
 export Operator
 export Majorana, MajoranaAlgebra
+export Pauli, PauliAlgebra
+export Fermion, FermionAlgebra
+export Boson, BosonAlgebra
 
 include("programs.jl")
 include("algebra.jl")
