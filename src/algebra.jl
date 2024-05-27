@@ -297,6 +297,29 @@ function BosonAlgebra()
     return Operator(Boson(0,0)), Operator(Boson(0,1))
 end
 
+function ==(a::Boson, b::Boson)
+    return a.cr == b.cr && a.an == b.an
+end
+
+function hash(a::Boson, h::UInt)
+    return hash((a.cr, a.an), h)
+end
+
+function copy(a::Boson)::Boson
+    return Boson(a.cr, a.an)
+end
+
+function one(::Type{Boson})
+    return Boson(0,0)
+end
+
+function adjoint(a::Boson)::Boson
+    return Boson(a.an, a.cr)
+end
+
+function *(a::Boson, b::Boson)::BosonOperator
+end
+
 struct Wick <: Basis
 end
 
