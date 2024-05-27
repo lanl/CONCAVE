@@ -1,6 +1,1 @@
-using Test
-
-using CONCAVE
-
-@testset "" begin
-end
+include("algebra.jl")
