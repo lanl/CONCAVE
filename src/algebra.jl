@@ -11,6 +11,7 @@ module Algebras
 import Base: +,-,*,^,adjoint
 import Base: zero, one
 import Base: copy, hash, ==, isapprox, isless, show
+import Base: setindex!, getindex
 
 export Operator
 export Majorana, MajoranaAlgebra
@@ -19,14 +20,14 @@ abstract type Basis end
 
 struct Operator{B<:Basis}
     terms::Dict{B,ComplexF64}
+end
 
-    function Operator{B}() where {B<:Basis}
-        new(Dict{B,ComplexF64}())
-    end
+function Operator{B}() where {B<:Basis}
+    Operator{B}(Dict{B,ComplexF64}())
+end
 
-    function Operator{B}(b::B) where {B<:Basis}
-        new(Dict{B,ComplexF64}(b => one(ComplexF64)))
-    end
+function Operator{B}(b::B) where {B<:Basis}
+    Operator{B}(Dict{B,ComplexF64}(b => one(ComplexF64)))
 end
 
 function Operator(b::B) where {B<:Basis}
@@ -39,7 +40,7 @@ end
 
 function isapprox(a::Operator{B}, b::Operator{B})::Bool where {B}
     for op in keys(a.terms) ∪ keys(b.terms)
-        if !isapprox(a.terms[op], b.terms[op], atol=1e-12)
+        if !isapprox(a[op], b[op], atol=1e-12)
             return false
         end
     end
@@ -54,12 +55,32 @@ function copy(a::Operator{B})::Operator{B} where {B}
     return Operator(copy(a.terms))
 end
 
+function getindex(a::Operator{B}, b::B)::ComplexF64 where {B}
+    if b in keys(a.terms)
+        return a.terms[b]
+    else
+        return zero(ComplexF64)
+    end
+end
+
+function setindex!(a::Operator{B}, c::ComplexF64, b::B)::ComplexF64 where {B}
+    a.terms[b] = c
+    return c
+end
+
 function zero(::Type{Operator{B}})::Operator{B} where {B}
     return Operator{B}()
 end
 
 function one(::Type{Operator{B}})::Operator{B} where {B}
     return Operator(one(B))
+end
+
+function add!(a::Operator{B}, b::Operator{B}, c::ComplexF64=one(ComplexF64))::Operator{B} where {B}
+    for op in keys(b.terms)
+        a[op] = a[op] + c*b[op]
+    end
+    return a
 end
 
 function +(a::Operator{B}, b::Operator{B})::Operator{B} where {B}
@@ -72,7 +93,7 @@ end
 function -(a::Operator{B})::Operator{B} where {B}
     r = copy(a)
     for op in keys(r.terms)
-        r.terms[op] = -r.terms[op]
+        r[op] = -r[op]
     end
     return r
 end
@@ -85,16 +106,16 @@ function *(a::Operator{B}, b::Operator{B})::Operator{B} where {B}
     r = zero(Operator{B})
     for a′ in keys(a.terms)
         for b′ in keys(b.terms)
-            r += a.terms[a′]*b.terms[b′] * (a′*b′)
+            r += a[a′]*b[b′] * (a′*b′)
         end
     end
     return r
 end
 
-function *(c::ComplexF64, a::Operator{B})::Operator{B} where {B<:Number}
+function *(c, a::Operator{B})::Operator{B} where {B}
     r = copy(a)
     for op in keys(r.terms)
-        r.terms[op] = c*r.terms[op]
+        r[op] = c*r[op]
     end
     return r
 end
@@ -120,7 +141,7 @@ end
 function adjoint(a::Operator{B})::Operator{B} where {B}
     r = zero(Operator{B})
     for op in keys(a.terms)
-        r = r+adjoint(a.terms[op])*adjoint(op)
+        r = r+adjoint(a[op])*adjoint(op)
     end
     return r
 end
@@ -169,8 +190,8 @@ function adjoint(γ::Majorana)::Majorana
     return copy(γ)
 end
 
-function *(γ1::Majorana, γ2::Majorana)::Majorana
-    # TODO
+function *(γ1::Majorana, γ2::Majorana)::MajoranaOperator
+    return Operator(Majorana(γ1.γ ⊻ γ2.γ))
 end
 
 end

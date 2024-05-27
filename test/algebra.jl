@@ -6,12 +6,12 @@ using CONCAVE
 
 @testset "Majorana" begin
     I,γ = MajoranaAlgebra()
-    @assert I*γ ≈ γ
-    @assert γ*γ ≈ I
-    @assert 2*γ ≈ γ + γ
-    @assert I+γ ≈ γ+I
-    @assert I-γ ≆ γ-I
-    @assert I-γ ≈ -(γ-I)
+    @test I*γ ≈ γ
+    @test γ*γ ≈ I
+    @test 2*γ ≈ γ + γ
+    @test I+γ ≈ γ+I
+    @test !(I-γ ≈ γ-I)
+    @test I-γ ≈ -(γ-I)
 end
 
 @testset "Pauli" begin
