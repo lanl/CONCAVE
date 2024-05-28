@@ -344,8 +344,38 @@ function *(a::Boson, b::Boson)::BosonOperator
 end
 
 struct Wick <: Basis
+    b::Dict{String,Boson}
+    f::Dict{String,Fermion}
 end
 
 WickOperator = Operator{Wick}
+
+function WickAlgebra()
+    # TODO
+end
+
+function ==(a::Wick, b::Wick)
+    # TODO
+end
+
+function hash(a::Wick)
+    # TODO
+end
+
+function copy(a::Wick)::Wick
+    # TODO
+end
+
+function one(::Type{Wick})
+    # TODO
+end
+
+function adjoint(a::Wick)::WickOperator
+    # TODO
+end
+
+function *(a::Wick, b::Wick)::WickOperator
+    # TODO
+end
 
 end
