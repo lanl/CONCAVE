@@ -189,8 +189,8 @@ function one(::Type{Majorana})::Majorana
     return Majorana(false)
 end
 
-function adjoint(γ::Majorana)::Majorana
-    return copy(γ)
+function adjoint(γ::Majorana)::MajoranaOperator
+    return Operator(γ)
 end
 
 function *(γ1::Majorana, γ2::Majorana)::MajoranaOperator
@@ -223,8 +223,8 @@ function one(::Type{Pauli})
     return Pauli('I')
 end
 
-function adjoint(a::Pauli)::Pauli
-    return copy(a)
+function adjoint(a::Pauli)::PauliOperator
+    return Operator(a)
 end
 
 function *(a::Pauli, b::Pauli)::PauliOperator
@@ -279,11 +279,23 @@ function one(::Type{Fermion})
     return Fermion(0,0)
 end
 
-function adjoint(a::Fermion)::Fermion
-    return Fermion(a.an, a.cr)
+function adjoint(a::Fermion)::FermionOperator
+    return Operator(Fermion(a.an, a.cr))
 end
 
 function *(a::Fermion, b::Fermion)::FermionOperator
+    if a.an == false || b.cr == false
+        if (a.an && b.an) || (a.cr && b.cr)
+            return zero(FermionOperator)
+        end
+        cr = a.cr || b.cr
+        an = a.an || b.an
+        return Operator(Fermion(cr,an))
+    elseif a.cr == false && b.an == false
+        return one(FermionOperator) - Operator(Fermion(true,true))
+    else
+        return Operator(Fermion(a.cr,b.an))
+    end
 end
 
 struct Boson <: Basis
@@ -313,11 +325,22 @@ function one(::Type{Boson})
     return Boson(0,0)
 end
 
-function adjoint(a::Boson)::Boson
-    return Boson(a.an, a.cr)
+function adjoint(a::Boson)::BosonOperator
+    return Operator(Boson(a.an, a.cr))
 end
 
 function *(a::Boson, b::Boson)::BosonOperator
+    # Base case:
+    if a.an == 0
+        return Operator(Boson(a.cr+b.cr,b.an))
+    end
+    if b.cr == 0
+        return Operator(Boson(a.cr,a.an+b.an))
+    end
+    # Recurse
+    opl = Operator(Boson(a.cr, a.an-1))
+    opr = Operator(Boson(b.cr-1, b.an))
+    return opl*opr + opl*Operator(Boson(1,1))*opr
 end
 
 struct Wick <: Basis

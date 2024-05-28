@@ -27,10 +27,27 @@ end
 
 @testset "Fermion" begin
     I,c = FermionAlgebra()
+    cdag = adjoint(c)
+    @test c*c ≈ 0*I
+    @test c*I ≈ c
+    @test cdag*I ≈ cdag
+    @test !(c ≈ cdag)
+    @test I*c ≈ c
+    @test I*cdag ≈ cdag
+    @test cdag*cdag ≈ 0*I
+    @test cdag*c + c*cdag ≈ I
+    @test cdag*c * cdag*c ≈ cdag*c
 end
 
 @testset "Boson" begin
     I,a = BosonAlgebra()
+    adag = adjoint(a)
+    @test a*I ≈ a
+    @test I*a ≈ a
+    @test adag*I ≈ adag
+    @test I*adag ≈ adag
+    @test a*adag - adag*a ≈ I
+    @test a*adag*a*adag ≈ -a*adag + a*a*adag*adag
 end
 
 @testset "Wick" begin
