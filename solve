@@ -1,2 +1,2 @@
 #!/bin/sh
-exec julia --project=. src/solve.jl $*
+exec julia --project=. src/solve.jl "$@"
