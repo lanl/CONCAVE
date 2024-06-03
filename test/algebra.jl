@@ -51,6 +51,9 @@ end
 end
 
 @testset "Wick" begin
+    I,ban,fan = WickAlgebra()
+    @assert adjoint(I) ≈ I
+    @assert I*I ≈ I
 end
 
 end

@@ -18,6 +18,7 @@ export Majorana, MajoranaAlgebra
 export Pauli, PauliAlgebra
 export Fermion, FermionAlgebra
 export Boson, BosonAlgebra
+export Wick, WickAlgebra
 
 abstract type Basis end
 
@@ -351,31 +352,57 @@ end
 WickOperator = Operator{Wick}
 
 function WickAlgebra()
-    # TODO
+    I = WickOperator(one(Wick))
+
+    function fan(n::String)::WickOperator
+        r = one(Wick)
+        r.f[n] = Fermion(false,true)
+        return WickOperator(r)
+    end
+
+    function ban(n::String)::WickOperator
+        r = one(Wick)
+        r.b[n] = Boson(0,1)
+        return WickOperator(r)
+    end
+
+    return I, ban, fan
 end
 
 function ==(a::Wick, b::Wick)
-    # TODO
+    return a.b == b.b && a.f == b.f
 end
 
-function hash(a::Wick)
-    # TODO
+function hash(a::Wick, h::UInt)::UInt
+    return hash((a.b,a.f), h)
 end
 
 function copy(a::Wick)::Wick
-    # TODO
+    return Wick(copy(a.b), copy(a.f))
 end
 
 function one(::Type{Wick})
-    # TODO
+    return Wick(Dict{String,Boson}(), Dict{String,Fermion}())
 end
 
 function adjoint(a::Wick)::WickOperator
-    # TODO
+    r = copy(a)
+    # Adjoint everything, and count swaps.
+    p = 0
+    for (n,op) in r.b
+        r.b[n] = adjoint(r.b[n])
+    end
+    for (n,op) in r.f
+        r.f[n] = adjoint(r.f[n])
+        p += r.f[n].cr + r.f[n].an
+    end
+    return (-1)^p * WickOperator(r)
 end
 
 function *(a::Wick, b::Wick)::WickOperator
+    r = WickOperator()
     # TODO
+    return r
 end
 
 end
