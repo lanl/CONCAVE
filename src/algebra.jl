@@ -8,8 +8,8 @@ Algebras to implement:
 
 module Algebras
 
-import Base: +,-,*,^,adjoint
-import Base: zero, one
+import Base: +,-,*,/,^,adjoint
+import Base: zero, one, isone
 import Base: copy, hash, ==, isapprox, isless, show
 import Base: setindex!, getindex
 
@@ -190,6 +190,10 @@ function one(::Type{Majorana})::Majorana
     return Majorana(false)
 end
 
+function isone(γ::Majorana)::Bool
+    return γ.γ == false
+end
+
 function adjoint(γ::Majorana)::MajoranaOperator
     return Operator(γ)
 end
@@ -222,6 +226,10 @@ end
 
 function one(::Type{Pauli})
     return Pauli('I')
+end
+
+function isone(a::Pauli)::Bool
+    return a.p == 'I'
 end
 
 function adjoint(a::Pauli)::PauliOperator
@@ -280,6 +288,10 @@ function one(::Type{Fermion})
     return Fermion(0,0)
 end
 
+function isone(a::Fermion)::Bool
+    return a.an == false && a.cr == false
+end
+
 function adjoint(a::Fermion)::FermionOperator
     return Operator(Fermion(a.an, a.cr))
 end
@@ -297,6 +309,10 @@ function *(a::Fermion, b::Fermion)::FermionOperator
     else
         return Operator(Fermion(a.cr,b.an))
     end
+end
+
+function isfermionic(a::Fermion)::Bool
+    return a.cr ⊻ a.an
 end
 
 struct Boson <: Basis
@@ -324,6 +340,10 @@ end
 
 function one(::Type{Boson})
     return Boson(0,0)
+end
+
+function isone(a::Boson)::Bool
+    return a.cr == 0 && a.an == 0
 end
 
 function adjoint(a::Boson)::BosonOperator
@@ -385,24 +405,104 @@ function one(::Type{Wick})
     return Wick(Dict{String,Boson}(), Dict{String,Fermion}())
 end
 
+function isone(a::Wick)::Bool
+    return isempty(a.b) && isempty(a.f)
+end
+
 function adjoint(a::Wick)::WickOperator
     r = copy(a)
-    # Adjoint everything, and count swaps.
-    p = 0
+    # Adjoint everything, and count fermionic operators.
+    nf = 0
     for (n,op) in r.b
-        r.b[n] = adjoint(r.b[n])
+        r.b[n] = Boson(op.an, op.cr)
     end
     for (n,op) in r.f
-        r.f[n] = adjoint(r.f[n])
-        p += r.f[n].cr + r.f[n].an
+        r.f[n] = Fermion(op.an, op.cr)
+        nf += isfermionic(r.f[n])
     end
-    return (-1)^p * WickOperator(r)
+    nswaps = round(Int, (nf * (nf-1)/2))
+    return (-1)^nswaps * WickOperator(r)
 end
 
 function *(a::Wick, b::Wick)::WickOperator
-    r = WickOperator()
-    # TODO
-    return r
+    # Operate recursively. The base case: check if either is the identity.
+    if isone(a)
+        return WickOperator(copy(b))
+    elseif isone(b)
+        return WickOperator(copy(a))
+    end
+    # There are both fermionic and bosonic modes in general. If there are
+    # fermionic modes we'll recurse on them first.
+    if isempty(a.f) && isempty(b.f)
+        # There are no fermionic modes.
+        mode = min(minimum(keys(a.b)), minimum(keys(b.b)))
+        # Take the product of this mode.
+        mp = one(BosonOperator)
+        if mode in keys(a.b)
+            mp = mp * BosonOperator(a.b[mode])
+        end
+        if mode in keys(b.b)
+            mp = mp * BosonOperator(b.b[mode])
+        end
+        # Take the product of what remains.
+        a′ = copy(a)
+        b′ = copy(b)
+        delete!(a′.b, mode)
+        delete!(b′.b, mode)
+        p = a′*b′
+        # Merge.
+        r = zero(WickOperator)
+        for (mop,mc) in mp.terms
+            for (wp,wc) in p.terms
+                w = copy(wp)
+                if !isone(mop)
+                    w.b[mode] = mop
+                end
+                r += mc*wc*WickOperator(w)
+            end
+        end
+        return r
+    else
+        # Find the first fermionic mode.
+        mode = min(minimum(keys(a.f)), minimum(keys(b.f)))
+        # Take the product of this mode.
+        mp = one(FermionOperator)
+        if mode in keys(a.f)
+            mp = mp * FermionOperator(a.f[mode])
+        end
+        if mode in keys(b.f)
+            mp = mp * FermionOperator(b.f[mode])
+        end
+        # Take the product of what remains.
+        a′ = copy(a)
+        b′ = copy(b)
+        delete!(a′.f, mode)
+        delete!(b′.f, mode)
+        p = a′*b′
+        # Compute the sign. This sign comes from needing to commute `mode` from b,
+        # through all fermionic operators in a′.
+        naf = 0
+        for (m,aop) in a′.f
+            naf += isfermionic(aop)
+        end
+        if mode in keys(b.f) && isfermionic(b.f[mode])
+            sgn = (-1.)^(naf)
+        else
+            sgn = 1.
+        end
+        # Merge.
+        r = zero(WickOperator)
+        for (mop,mc) in mp.terms
+            for (wp,wc) in p.terms
+                w = copy(wp)
+                if !isone(mop)
+                    w.f[mode] = mop
+                end
+                r += mc*wc*WickOperator(w)
+            end
+        end
+        return sgn * r
+    end
 end
 
 end
