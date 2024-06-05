@@ -4,6 +4,8 @@ export ConvexProgram, SemidefiniteProgram
 export CompositeSDP, DenseSDP
 export dual
 
+using LinearAlgebra
+
 abstract type ConvexProgram end
 
 abstract type SemidefiniteProgram <: ConvexProgram end
@@ -33,6 +35,22 @@ struct CompositeSDP <: SemidefiniteProgram
 end
 
 function dual(primal::CompositeSDP)::CompositeSDP
+end
+
+function initial(sdp::CompositeSDP)::Vector{Float64}
+    return zeros(Float64, length(sdp.h))
+end
+
+function badness!(∇::AbstractVector{Float64}, sdp::CompositeSDP, y::AbstractVector{Float64})::Float64
+    return 0.
+end
+
+function barrier!(∇::AbstractVector{Float64}, sdp::CompositeSDP, y::AbstractVector{Float64})::Float64
+    return 0.
+end
+
+function objective!(∇::AbstractVector{Float64}, sdp::CompositeSDP, y::AbstractVector{Float64})::Float64
+    return sdp.h ⋅ y
 end
 
 end

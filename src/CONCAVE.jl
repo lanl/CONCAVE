@@ -4,8 +4,6 @@ export ConvexProgram, SemidefiniteProgram
 export CompositeSDP, DenseSDP
 export dual
 
-export solve
-
 export Operator
 export Majorana, MajoranaAlgebra
 export Pauli, PauliAlgebra

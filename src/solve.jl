@@ -28,7 +28,7 @@ function demo(::Val{:RT})
     sdp = CompositeSDP(1,[1])
 
     # Solve the SDP
-    sol = solve(sdp)
+    sol = CONCAVE.IPM.solve(sdp; verbose=true)
     println(sol)
 end
 
