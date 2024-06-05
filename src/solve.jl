@@ -9,6 +9,10 @@ function demo(::Val{:RT})
     ω = 1.
     λ = 0.1
 
+    # For diagonalizing.
+    p = CONCAVE.Hamiltonians.Oscillator(ω, λ)
+    ham = CONCAVE.Hamiltonians.Hamiltonian(p)
+
     # Construct operators.
     I,a = BosonAlgebra()
     x = sqrt(1/(2*ω)) * (a + a')
@@ -19,16 +23,21 @@ function demo(::Val{:RT})
 end
 
 function demo(::Val{:SpinRT})
-    # Parameters
+    # Parameters.
     J = 1.
 
     # Construct operators.
     I,X,Y,Z = SpinAlgebra()
 
-    # Build the Hamiltonian
+    # Build the Hamiltonian.
 end
 
 function demo(::Val{:Neutrons})
+    # Parameters.
+
+    # Construct operators.
+
+    # Build the Hamiltonian.
 end
 
 function main()
