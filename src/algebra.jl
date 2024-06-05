@@ -18,6 +18,7 @@ export Majorana, MajoranaAlgebra
 export Pauli, PauliAlgebra
 export Fermion, FermionAlgebra
 export Boson, BosonAlgebra
+export Spins, SpinAlgebra
 export Wick, WickAlgebra
 
 abstract type Basis end
@@ -362,6 +363,59 @@ function *(a::Boson, b::Boson)::BosonOperator
     opl = Operator(Boson(a.cr, a.an-1))
     opr = Operator(Boson(b.cr-1, b.an))
     return opl*opr + opl*Operator(Boson(1,1))*opr
+end
+
+struct Spin <: Basis
+    m::Dict{String,Pauli}
+end
+
+SpinOperator = Operator{Spin}
+
+function SpinAlgebra()
+    function X(n::String)::Spin
+        r = one(Spin)
+        r.m[n] = Pauli('X')
+        return SpinOperator(r)
+    end
+    function Y(n::String)::Spin
+        r = one(Spin)
+        r.m[n] = Pauli('Y')
+        return SpinOperator(r)
+    end
+    function Z(n::String)::Spin
+        r = one(Spin)
+        r.m[n] = Pauli('Z')
+        return SpinOperator(r)
+    end
+    return Spin(Dict{String,Pauli}()), X, Y, Z
+end
+
+function ==(a::Spin, b::Spin)
+    return a.m == b.m
+end
+
+function hash(a::Spin, h::UInt)::UInt
+    return hash(a.m, h)
+end
+
+function copy(a::Spin)::Spin
+    return Spin(copy(a.m))
+end
+
+function one(::Type{Spin})::Spin
+    return Spin(Dict{String,Pauli}())
+end
+
+function isone(a::Spin)::Bool
+    return isempty(a.m)
+end
+
+function adjoint(a::Spin)::SpinOperator
+    # TODO
+end
+
+function *(a::Spin, b::Spin)::SpinOperator
+    # TODO
 end
 
 struct Wick <: Basis

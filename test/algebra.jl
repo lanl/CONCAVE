@@ -50,6 +50,10 @@ end
     @test a*adag*a*adag ≈ -a*adag + a*a*adag*adag
 end
 
+@testset "Spin" begin
+    I,X,Y,Z = SpinAlgebra()
+end
+
 @testset verbose=true "Wick" begin
     @testset "Bosonic" begin
         I,ban,fan = WickAlgebra()

@@ -8,6 +8,7 @@ export Majorana, MajoranaAlgebra
 export Pauli, PauliAlgebra
 export Fermion, FermionAlgebra
 export Boson, BosonAlgebra
+export Spin, SpinAlgebra
 export Wick, WickAlgebra
 
 include("programs.jl")

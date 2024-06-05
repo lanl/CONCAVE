@@ -18,6 +18,19 @@ function demo(::Val{:RT})
     H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
 end
 
+function demo(::Val{:SpinRT})
+    # Parameters
+    J = 1.
+
+    # Construct operators.
+    I,X,Y,Z = SpinAlgebra()
+
+    # Build the Hamiltonian
+end
+
+function demo(::Val{:Neutrons})
+end
+
 function main()
     args = let
         s = ArgParseSettings()
@@ -30,6 +43,7 @@ function main()
 
     if !isnothing(args["demo"])
         demo(args["demo"])
+        return
     end
 end
 
