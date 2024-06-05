@@ -4,6 +4,8 @@ using LinearAlgebra
 
 using ..Programs
 
+export solve
+
 function solve_dense(prob::DenseSDP; verbose::Bool=false)::Float64
     if verbose
         println("Solving a $(prob.N)-dimensional SDP")
@@ -73,6 +75,9 @@ function solve_dense(prob::DenseSDP; verbose::Bool=false)::Float64
         t = μ*t
     end
     return prob.H'x + prob.h
+end
+
+function solve(sdp::SemidefiniteProgram)
 end
 
 end

@@ -20,6 +20,16 @@ function demo(::Val{:RT})
 
     # Build the Hamiltonian.
     H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
+
+    # Generators of the SDP.
+    gens = [I, x, p, x^2, p^2, x*p]
+
+    # Construct the SDP.
+    sdp = CompositeSDP(1,[1])
+
+    # Solve the SDP
+    sol = solve(sdp)
+    println(sol)
 end
 
 function demo(::Val{:SpinRT})
