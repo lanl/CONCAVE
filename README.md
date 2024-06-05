@@ -1,6 +1,25 @@
 # CONCAVE
 Convex Optimization for Numerical Computations Achieving Verifiable Estimates
 
+## Installation
+
+There are two ways to install and use this package. Both assume that Julia is
+already present on the system.
+
+Assuming that only the Julia package `CONCAVE` itself is desired, you can add
+it to your Julia environment with
+```
+julia> Pkg.add("https://github.com/lanl/CONCAVE")
+```
+
+Alternatively, to download the full source in "development mode":
+```
+$ git clone https://github.com/lanl/CONCAVE
+$ cd CONCAVE
+$ julia
+julia> Pkg.activate(".")
+```
+
 ## LANL open-source release
 
 This project is part of the suite "Convex methods for physics", known

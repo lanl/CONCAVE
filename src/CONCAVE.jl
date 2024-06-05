@@ -1,6 +1,7 @@
 module CONCAVE
 
 export ConvexProgram, SemidefiniteProgram, DenseSDP
+export dual
 
 export Operator
 export Majorana, MajoranaAlgebra
