@@ -50,6 +50,12 @@ function demo(::Val{:Neutrons})
     # Build the Hamiltonian.
 end
 
+function demo(::Val{:Thermo})
+end
+
+function demo(::Val{:SpinThermo})
+end
+
 function main()
     args = let
         s = ArgParseSettings()

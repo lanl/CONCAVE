@@ -1,7 +1,7 @@
 module CONCAVE
 
 export ConvexProgram, SemidefiniteProgram
-export CompositeSDP, DenseSDP
+export CompositeSDP
 export dual
 
 export Operator
