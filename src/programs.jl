@@ -2,7 +2,11 @@ module Programs
 
 export ConvexProgram, SemidefiniteProgram
 export CompositeSDP
-export dual
+
+export SemidefiniteModel
+export primal, dual
+
+import Base: push!
 
 using LinearAlgebra
 
@@ -26,10 +30,6 @@ struct CompositeSDP <: SemidefiniteProgram
         end
         return new(copy(D),M₀,M,h)
     end
-end
-
-function dual(primal::CompositeSDP)::CompositeSDP
-    # TODO
 end
 
 function initial(sdp::CompositeSDP)::Vector{Float64}
@@ -83,6 +83,36 @@ end
 
 function objective(sdp::CompositeSDP, y::AbstractVector{Float64})::Tuple{Float64, Vector{Float64}}
     return sdp.h ⋅ y, sdp.h
+end
+
+struct SemidefiniteModel{T}
+    variables::Vector{T}
+
+    function SemidefiniteModel{T}() where {T}
+        variables = Vector{T}()
+        new{T}(variables)
+    end
+end
+
+struct Variable{T}
+    name::T
+end
+
+struct Equality{T}
+end
+
+struct LinearExpression{T}
+end
+
+function (push!)(m::SemidefiniteModel{T}, var::Variable{T}) where {T}
+    push!(m.variables, var.name)
+    return m
+end
+
+function primal(m::SemidefiniteModel)::SemidefiniteProgram
+end
+
+function dual(m::SemidefiniteModel)::SemidefiniteProgram
 end
 
 end

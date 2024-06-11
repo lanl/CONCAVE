@@ -28,7 +28,7 @@ function solve(sdp::SemidefiniteProgram; verbose::Bool=false)::Tuple{Float64, Ve
     end
 
     # Phase 2
-    μ = 1.5
+    μ = 2.
     ϵ = 1e-6
     t₀ = 1.
 

@@ -24,12 +24,20 @@ function demo(::Val{:RT})
     # Generators of the SDP.
     gens = [I, x, p, x^2, p^2, x*p]
 
+    # Number of time intervals.
+    T = 2
+
+    # Operators that appear.
+    ops = []
+    for g in gens
+        for g′ in gens
+        end
+    end
+
     # Construct the SDP.
     sdp = CompositeSDP(1,[1])
 
-    # Solve the SDP
     sol = CONCAVE.IPM.solve(sdp; verbose=true)
-    println(sol)
 end
 
 function demo(::Val{:SpinRT})
@@ -54,6 +62,9 @@ function demo(::Val{:Thermo})
 end
 
 function demo(::Val{:SpinThermo})
+end
+
+function demo(::Val{:Coulomb})
 end
 
 function main()

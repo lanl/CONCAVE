@@ -37,4 +37,7 @@ function optimize!(f!, y::Vector{Float64})
     return f!(∇, y)[1]
 end
 
+struct BFGS
+end
+
 end
