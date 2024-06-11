@@ -14,6 +14,7 @@ export Wick, WickAlgebra
 
 include("programs.jl")
 include("algebra.jl")
+include("unconstrained.jl")
 include("ipm.jl")
 include("hamiltonians.jl")
 
