@@ -13,6 +13,9 @@ function demo(::Val{:RT})
     p = CONCAVE.Hamiltonians.Oscillator(ω, λ)
     ham = CONCAVE.Hamiltonians.Hamiltonian(p)
 
+    # Initial state.
+    # TODO
+
     # Construct operators.
     I,a = BosonAlgebra()
     x = sqrt(1/(2*ω)) * (a + a')
@@ -27,11 +30,26 @@ function demo(::Val{:RT})
     # Number of time intervals.
     T = 2
 
-    # Operators that appear.
+    # Basis operators that appear.
     ops = []
     for g in gens
         for g′ in gens
+            for b in keys((g*g′).terms)
+                if !(b in ops)
+                    push!(ops, b)
+                end
+            end
         end
+    end
+
+    # Algebraic identities.
+    # TODO
+
+    for b in ops
+        # Value
+        # TODO
+        # Derivative
+        # TODO
     end
 
     # Construct the SDP.
