@@ -7,12 +7,12 @@ export SemidefiniteModel
 export primal, dual
 
 export Operator
-export Majorana, MajoranaAlgebra
-export Pauli, PauliAlgebra
-export Fermion, FermionAlgebra
-export Boson, BosonAlgebra
-export Spin, SpinAlgebra
-export Wick, WickAlgebra
+export Majorana, MajoranaAlgebra, MajoranaOperator
+export Pauli, PauliAlgebra, PauliOperator
+export Fermion, FermionAlgebra, FermionOperator
+export Boson, BosonAlgebra, BosonOperator
+export Spins, SpinAlgebra, SpinOperator
+export Wick, WickAlgebra, WickOperator
 
 include("programs.jl")
 include("algebra.jl")

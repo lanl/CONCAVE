@@ -42,6 +42,14 @@ function demo(::Val{:RT})
         end
     end
 
+    # The matrix that has to be p.s-d.
+    M = Matrix{BosonOperator}(undef, length(gens), length(gens))
+    for (i,g) in enumerate(gens)
+        for (j,g′) in enumerate(gens)
+            M[i,j] = g' * g
+        end
+    end
+
     # Algebraic identities.
     # TODO
 

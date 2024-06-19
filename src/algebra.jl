@@ -14,12 +14,12 @@ import Base: copy, hash, ==, isapprox, isless, show
 import Base: setindex!, getindex
 
 export Operator
-export Majorana, MajoranaAlgebra
-export Pauli, PauliAlgebra
-export Fermion, FermionAlgebra
-export Boson, BosonAlgebra
-export Spins, SpinAlgebra
-export Wick, WickAlgebra
+export Majorana, MajoranaAlgebra, MajoranaOperator
+export Pauli, PauliAlgebra, PauliOperator
+export Fermion, FermionAlgebra, FermionOperator
+export Boson, BosonAlgebra, BosonOperator
+export Spins, SpinAlgebra, SpinOperator
+export Wick, WickAlgebra, WickOperator
 
 abstract type Basis end
 
