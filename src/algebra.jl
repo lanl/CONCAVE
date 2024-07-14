@@ -11,7 +11,7 @@ module Algebras
 import Base: +,-,*,/,^,adjoint
 import Base: zero, one, isone
 import Base: copy, hash, ==, isapprox, isless, show
-import Base: setindex!, getindex
+import Base: setindex!, getindex, in
 
 export Operator
 export Majorana, MajoranaAlgebra, MajoranaOperator
@@ -71,6 +71,10 @@ end
 function setindex!(a::Operator{B}, c::ComplexF64, b::B)::ComplexF64 where {B}
     a.terms[b] = c
     return c
+end
+
+function in(b::B, a::Operator{B})::Bool where {B}
+    return b in keys(a.terms)
 end
 
 function zero(::Type{Operator{B}})::Operator{B} where {B}

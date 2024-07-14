@@ -1,4 +1,5 @@
 using ArgParse
+using LinearAlgebra: tr
 
 using CONCAVE
 
@@ -31,12 +32,12 @@ function demo(::Val{:RT})
     T = 2
 
     # Basis operators that appear.
-    ops = []
+    basis = []
     for g in gens
         for g′ in gens
             for b in keys((g*g′).terms)
-                if !(b in ops)
-                    push!(ops, b)
+                if !(b in basis)
+                    push!(basis, b)
                 end
             end
         end
@@ -50,14 +51,63 @@ function demo(::Val{:RT})
         end
     end
 
-    # Algebraic identities.
-    # TODO
+    # Algebraic identities. The list of returned matrices A is such that, at
+    # any time, tracing A with the matrix of expectation values yields zero.
+    # The remaining identity is that <1> = 1.
+    A,b = let
+        # Primal degrees of freedom
+        m = Vector{Matrix{ComplexF64}}()
+        for (k,op) in enumerate(basis)
+            if op == Boson(0,0)
+                continue
+            end
+            mat = zeros(ComplexF64, (length(gens),length(gens)))
+            for i in 1:length(gens)
+                for j in 1:length(gens)
+                    if op in M[i,j]
+                        mat[i,j] += M[i,j][op]
+                    end
+                end
+            end
+            push!(m, mat)
+        end
 
-    for b in ops
-        # Value
-        # TODO
-        # Derivative
-        # TODO
+        # Get orthogonal space (dual degrees of freedom)
+        A = Vector{Matrix{ComplexF64}}()
+        b = Vector{Float64}()
+        for i in 1:(length(gens)-length(m))
+            # Generate random Hermitian matrix.
+            mat = randn(ComplexF64, (length(gens),length(gens)))
+            mat = mat + mat'
+            # Orthogonalize against A and m
+            for a in Iterators.flatten([A,m])
+                mat -= a * (tr(mat * a')) / (tr(a * a'))
+            end
+            # Normalize
+            mat = mat / sqrt(tr(mat' * mat))
+            push!(A, mat)
+            push!(b, 0.)
+        end
+
+        # Identity constraint
+        mat = zeros(ComplexF64, (length(gens), length(gens)))
+        mat[1,1] = 1.
+        push!(A, mat)
+        push!(b, 1.)
+        A,b
+    end
+
+    # Equations of motion.
+    C, D = let
+        C = Vector{Matrix{ComplexF64}}()
+        D = Vector{Matrix{ComplexF64}}()
+        for b in basis
+            # Value
+            # TODO
+            # Derivative
+            # TODO
+        end
+        C,D
     end
 
     # Construct the SDP.
