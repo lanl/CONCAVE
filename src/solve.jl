@@ -51,13 +51,10 @@ function demo(::Val{:RT})
         end
     end
 
-    # Algebraic identities. The list of returned matrices A is such that, at
-    # any time, tracing A with the matrix of expectation values yields zero.
-    # The remaining identity is that <1> = 1.
-    A,b = let
-        # Primal degrees of freedom
-        m = Vector{Matrix{ComplexF64}}()
-        for (k,op) in enumerate(basis)
+    # Degrees of freedom in the matrix M.
+    m = let
+        m = Dict{Boson, Matrix{ComplexF64}}()
+        for op in basis
             if op == Boson(0,0)
                 continue
             end
@@ -69,18 +66,34 @@ function demo(::Val{:RT})
                     end
                 end
             end
-            push!(m, mat)
+            m[op] = mat
         end
+        m
+    end
 
+    # Matrices for extracting basis expectation values.
+    E = let
+        E = Dict{Boson, Matrix{ComplexF64}}()
+        for b in keys(m)
+            mat = m[b]' / tr(m[b]'m[b])
+            E[b] = mat
+        end
+        E
+    end
+
+    # Algebraic identities. The list of returned matrices A is such that, at
+    # any time, tracing A with the matrix of expectation values yields zero.
+    # The remaining identity is that <1> = 1.
+    A,b = let
         # Get orthogonal space (dual degrees of freedom)
         A = Vector{Matrix{ComplexF64}}()
         b = Vector{Float64}()
-        for i in 1:(length(gens)-length(m))
+        for i in 1:(length(gens)^2-length(m))
             # Generate random Hermitian matrix.
             mat = randn(ComplexF64, (length(gens),length(gens)))
             mat = mat + mat'
             # Orthogonalize against A and m
-            for a in Iterators.flatten([A,m])
+            for a in Iterators.flatten([A,values(m)])
                 mat -= a * (tr(mat * a')) / (tr(a * a'))
             end
             # Normalize
@@ -99,13 +112,28 @@ function demo(::Val{:RT})
 
     # Equations of motion.
     C, D = let
+        # C is the matrix that plucks out the thing to be differentiated. D is
+        # the matrix that selects the derivative.
         C = Vector{Matrix{ComplexF64}}()
         D = Vector{Matrix{ComplexF64}}()
-        for b in basis
+        for b in keys(m)
+            op = Operator(b)
             # Value
-            # TODO
+            push!(C, E[b])
             # Derivative
-            # TODO
+            dop = 1im * (H*op - op*H)
+            mat = zeros(ComplexF64, length(gens), length(gens))
+            ok = true
+            for top in keys(dop.terms)
+                if top in keys(E)
+                    mat += dop[top] * E[top]
+                else
+                    ok = false
+                end
+            end
+            if ok
+                push!(D, mat)
+            end
         end
         C,D
     end
