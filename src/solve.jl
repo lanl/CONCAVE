@@ -142,6 +142,7 @@ function demo(::Val{:RT})
     sdp = CompositeSDP(1,[1])
 
     sol = CONCAVE.IPM.solve(sdp; verbose=true)
+    println(sol)
 end
 
 function demo(::Val{:SpinRT})
@@ -150,6 +151,15 @@ function demo(::Val{:SpinRT})
 
     # Construct operators.
     I,X,Y,Z = SpinAlgebra()
+
+    # Build the Hamiltonian.
+end
+
+function demo(::Val{:ScalarRT})
+    # Parameters
+    N = 5
+    
+    # Construct operators.
 
     # Build the Hamiltonian.
 end
