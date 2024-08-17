@@ -3,16 +3,61 @@ using LinearAlgebra: tr
 
 using CONCAVE
 
+import CONCAVE.Programs: initial, constraints!, objective!
+
 demo(s::Symbol) = demo(Val(s))
+
+struct RTProgram <: ConvexProgram
+end
+
+function size(p::RTProgram)::Int
+    return 3
+end
+
+function initial(p::RTProgram)::Vector{Float64}
+    return rand(Float64, size(p))
+end
+
+function objective!(g, p::RTProgram, y::Vector{Float64})::Float64
+    g .= 0.0
+    r = 0.0
+    # TODO
+    return r
+end
+
+function constraints!(cb, p::RTProgram, y::Vector{Float64})
+end
 
 function demo(::Val{:RT})
     # Parameters.
     ω = 1.
-    λ = 0.1
+    λ = 1.0
+    T = 5.0
 
     # For diagonalizing.
+    dt = 1e-1
     p = CONCAVE.Hamiltonians.Oscillator(ω, λ)
     ham = CONCAVE.Hamiltonians.Hamiltonian(p)
+    Ω = ham.F.vectors[:,1]
+    ψ = zero(Ω)
+    #ψ[1:5] .= [0., -1.0im, 1., 1.0im, 0.0]
+    ψ[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
+    ψ₀ = copy(ψ)
+    U = CONCAVE.Hamiltonians.evolution(ham, dt)
+
+    for t in 0:dt:T
+        ex = real(ψ' * ham.op["x"] * ψ)
+
+        plo = RTProgram()
+        phi = RTProgram()
+        lo, ylo = CONCAVE.IPM.solve(plo; verbose=false)
+        hi, yhi = CONCAVE.IPM.solve(phi; verbose=false)
+
+        println("$t $ex $(-lo) $hi")
+        ψ = U * ψ
+    end
+
+    return
 
     # Initial state.
     # TODO
@@ -160,6 +205,21 @@ function demo(::Val{:ScalarRT})
     N = 5
     
     # Construct operators.
+
+    # Build the Hamiltonian.
+end
+
+struct HubbardRTProgram
+end
+
+function initial(p::HubbardRTProgram)::Vector{Float64}
+end
+
+function demo(::Val{:HubbardRT})
+    # Parameters
+    N = 10
+
+    # Construct operators
 
     # Build the Hamiltonian.
 end

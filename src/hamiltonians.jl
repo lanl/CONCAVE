@@ -3,8 +3,13 @@ module Hamiltonians
 using LinearAlgebra
 
 struct Hamiltonian{P}
+    op::Dict{String,Matrix{ComplexF64}}
     H::Matrix{ComplexF64}
     F::Eigen
+end
+
+function evolution(h::Hamiltonian, t::Float64)::Matrix{ComplexF64}
+    return h.F.vectors * diagm(exp.(-1im * t * h.F.values)) * h.F.vectors'
 end
 
 struct Oscillator
@@ -23,7 +28,13 @@ function Hamiltonian(par::Oscillator)::Hamiltonian{Oscillator}
     p = 1im * sqrt(ω/2) * (a' - a)
     H = 0.5*p^2 + 0.5 * ω^2 * x^2 + 0.25 * λ * x^4
     F = eigen(Hermitian(H))
-    return Hamiltonian{Oscillator}(H,F)
+    return Hamiltonian{Oscillator}(Dict("x"=>x),H,F)
+end
+
+struct FermiHubbardChain
+end
+
+function Hamiltonian(p::FermiHubbardChain)::Hamiltonian{FermiHubbardChain}
 end
 
 struct LatticeNeutron
