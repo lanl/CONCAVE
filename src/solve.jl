@@ -7,25 +7,113 @@ import CONCAVE.Programs: initial, constraints!, objective!
 
 demo(s::Symbol) = demo(Val(s))
 
-struct RTProgram <: ConvexProgram
+struct AHOProgram <: ConvexProgram
+    T::Float64
+    K::Int
+    N::Int
+    A::Vector{Matrix{ComplexF64}}
+    B::Vector{Matrix{ComplexF64}}
+    C::Vector{Matrix{ComplexF64}}
+    D::Vector{Matrix{ComplexF64}}
+    a::Vector{Float64}
+    b::Vector{Float64}
+    sgn::Float64
+
+    function AHOProgram(ω, λ, T, K, sgn)
+        osc = CONCAVE.Hamiltonians.Oscillator(ω, λ)
+        ham = CONCAVE.Hamiltonians.Hamiltonian(osc)
+        ψ₀ = zero(ham.F.vectors[:,1])
+        ψ₀[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
+
+        # Construct algebra, Hamiltonian, et cetera
+        I,x,p = let
+            I,c = BosonAlgebra()
+            x = sqrt(1/(2*ω)) * (c + c')
+            p = 1im * sqrt(ω/2) * (c' - c)
+            I,x,p
+        end
+        H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
+        gens = [I, x, p, x^2, p^2, x*p]
+        N = length(gens)
+        basis = []
+        for g in gens, g′ in gens
+            for b in keys((g*g′).terms)
+                if !(b in basis)
+                    push!(basis, b)
+                end
+            end
+        end
+        M = Matrix{BosonOperator}(undef, length(gens), length(gens))
+        for (i,g) in enumerate(gens)
+            for (j,g′) in enumerate(gens)
+                M[i,j] = g' * g
+            end
+        end
+        E = let
+            E = Dict{Boson, Matrix{ComplexF64}}()
+            # TODO
+            E
+        end
+
+        # Algebraic identities
+        A,a = let
+            A = Matrix{ComplexF64}[]
+            a = Float64[]
+            # TODO
+            A,a
+        end
+
+        # Boundary conditions
+        B,b = let
+            B = Matrix{ComplexF64}[]
+            b = Float64[]
+            # TODO
+            B,b
+        end
+
+        # Equations of motion
+        C,D = let
+            # C is the matrix that plucks out the thing to be differentiated. D is
+            # the matrix that selects the derivative.
+            C = Matrix{ComplexF64}[]
+            D = Matrix{ComplexF64}[]
+            # TODO
+            C,D
+        end
+
+        new(T,K,N,A,B,C,D,a,b,sgn)
+    end
 end
 
-function size(p::RTProgram)::Int
+function size(p::AHOProgram)::Int
+    # TODO
     return 3
 end
 
-function initial(p::RTProgram)::Vector{Float64}
+function initial(p::AHOProgram)::Vector{Float64}
     return rand(Float64, size(p))
 end
 
-function objective!(g, p::RTProgram, y::Vector{Float64})::Float64
+function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     g .= 0.0
     r = 0.0
     # TODO
     return r
 end
 
-function constraints!(cb, p::RTProgram, y::Vector{Float64})
+function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64})::Matrix{ComplexF64}
+    Λ = zeros(ComplexF64, (p.N,p.N))
+    # TODO
+    return Λ
+end
+
+function constraints!(cb, p::AHOProgram, y::Vector{Float64})
+    dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
+    for t in 0:0.01:p.T
+        Λ = Λ!(dΛ, p, y)
+        # TODO probably we should just be passing Λ into cb, right? cb should
+        # be a function, not a method...
+    end
 end
 
 function demo(::Val{:RT})
@@ -33,6 +121,7 @@ function demo(::Val{:RT})
     ω = 1.
     λ = 1.0
     T = 5.0
+    K = 2
 
     # For diagonalizing.
     dt = 1e-1
@@ -48,8 +137,8 @@ function demo(::Val{:RT})
     for t in 0:dt:T
         ex = real(ψ' * ham.op["x"] * ψ)
 
-        plo = RTProgram()
-        phi = RTProgram()
+        plo = AHOProgram(ω, λ, T, K, 1.0)
+        phi = AHOProgram(ω, λ, T, K, -1.0)
         lo, ylo = CONCAVE.IPM.solve(plo; verbose=false)
         hi, yhi = CONCAVE.IPM.solve(phi; verbose=false)
 
@@ -203,7 +292,7 @@ end
 function demo(::Val{:ScalarRT})
     # Parameters
     N = 5
-    
+
     # Construct operators.
 
     # Build the Hamiltonian.
@@ -212,7 +301,18 @@ end
 struct HubbardRTProgram
 end
 
+function size(p::HubbardRTProgram)::Int
+    return 3
+end
+
 function initial(p::HubbardRTProgram)::Vector{Float64}
+    return rand(Float64, size(p))
+end
+
+function objective!(g, p::HubbardRTProgram, y::Vector{Float64})::Float64
+end
+
+function constraints!(cb, p::HubbardRTProgram, y::Vector{Float64})
 end
 
 function demo(::Val{:HubbardRT})
@@ -246,7 +346,7 @@ function main()
         s = ArgParseSettings()
         @add_arg_table s begin
             "--demo"
-                arg_type = Symbol
+            arg_type = Symbol
         end
         parse_args(s)
     end
