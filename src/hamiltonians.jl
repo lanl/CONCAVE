@@ -19,7 +19,11 @@ end
 
 function Hamiltonian(par::Oscillator)::Hamiltonian{Oscillator}
     ω, λ = par.ω, par.λ
-    N = 200
+    N = 100
+    I = zeros(ComplexF64, (N,N))
+    for i in 1:N
+        I[i,i] = 1.0
+    end
     a = zeros(ComplexF64, (N,N))
     for i in 1:(N-1)
         a[i,i+1] = sqrt(ω * i)
@@ -28,7 +32,7 @@ function Hamiltonian(par::Oscillator)::Hamiltonian{Oscillator}
     p = 1im * sqrt(ω/2) * (a' - a)
     H = 0.5*p^2 + 0.5 * ω^2 * x^2 + 0.25 * λ * x^4
     F = eigen(Hermitian(H))
-    return Hamiltonian{Oscillator}(Dict("x"=>x),H,F)
+    return Hamiltonian{Oscillator}(Dict("I"=>I,"x"=>x,"p"=>p,"a"=>a),H,F)
 end
 
 struct FermiHubbardChain

@@ -24,6 +24,7 @@ struct AHOProgram <: ConvexProgram
         ham = CONCAVE.Hamiltonians.Hamiltonian(osc)
         ψ₀ = zero(ham.F.vectors[:,1])
         ψ₀[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
+        ψ₀ = ψ₀ / (ψ₀'ψ₀)
 
         # Construct algebra, Hamiltonian, et cetera
         I,x,p = let
@@ -43,28 +44,71 @@ struct AHOProgram <: ConvexProgram
                 end
             end
         end
+        # The matrix of operators
         M = Matrix{BosonOperator}(undef, length(gens), length(gens))
         for (i,g) in enumerate(gens)
             for (j,g′) in enumerate(gens)
                 M[i,j] = g' * g
             end
         end
-        E = let
+        # Degrees of freedom, and matrices for plucking out expectation values
+        m,E = let
+            m = Dict{Boson, Matrix{ComplexF64}}()
             E = Dict{Boson, Matrix{ComplexF64}}()
-            # TODO
-            E
+            for op in basis
+                mat = zeros(ComplexF64, (N,N))
+                for i in 1:length(gens), j in 1:length(gens)
+                    mat[i,j] += M[i,j][op]
+                end
+                E[op] = mat' / tr(mat'mat)
+                if op != Boson(0,0)
+                    m[op] = mat
+                end
+            end
+            m,E
         end
 
         # Algebraic identities
         A,a = let
             A = Matrix{ComplexF64}[]
-            a = Float64[]
-            # TODO
-            A,a
+            b = Float64[]
+            for i in 1:(length(gens)^2-length(m))
+                # Generate random Hermitian matrix.
+                mat = randn(ComplexF64, (length(gens),length(gens)))
+                mat = mat + mat'
+                # Orthogonalize against A and m
+                for a in Iterators.flatten([A,values(m)])
+                    mat -= a * (tr(mat * a')) / (tr(a * a'))
+                end
+                # Normalize
+                mat = mat / sqrt(tr(mat' * mat))
+                push!(A, mat)
+                push!(b, 0.)
+            end
+
+            # Identity constraint
+            mat = zeros(ComplexF64, (length(gens), length(gens)))
+            mat[1,1] = 1.
+            push!(A, mat)
+            push!(b, 1.)
+            A,b
         end
 
         # Boundary conditions
         B,b = let
+            # Initial conditions, determined quasi-manually.
+            initial = Dict{Boson, ComplexF64}()
+            for i in 0:12, j in 0:12
+                ψ = ψ₀
+                for n in 1:j
+                    ψ = ham.op["a"]*ψ
+                end
+                for n in 1:i
+                    ψ = ham.op["a"]'*ψ
+                end
+                initial[Boson(i,j)] = ψ₀'ψ
+            end
+
             B = Matrix{ComplexF64}[]
             b = Float64[]
             # TODO
@@ -77,7 +121,23 @@ struct AHOProgram <: ConvexProgram
             # the matrix that selects the derivative.
             C = Matrix{ComplexF64}[]
             D = Matrix{ComplexF64}[]
-            # TODO
+            for b in basis
+                op = Operator(b)
+                dop = 1im * (H*op - op*H)
+                mat = zeros(ComplexF64, length(gens), length(gens))
+                ok = true
+                for top in keys(dop.terms)
+                    if top in keys(E)
+                        mat += dop[top] * E[top]
+                    else
+                        ok = false
+                    end
+                end
+                if ok
+                    push!(C, E[b])
+                    push!(D, mat)
+                end
+            end
             C,D
         end
 
@@ -145,138 +205,6 @@ function demo(::Val{:RT})
         println("$t $ex $(-lo) $hi")
         ψ = U * ψ
     end
-
-    return
-
-    # Initial state.
-    # TODO
-
-    # Construct operators.
-    I,a = BosonAlgebra()
-    x = sqrt(1/(2*ω)) * (a + a')
-    p = 1im * sqrt(ω/2) * (a' - a)
-
-    # Build the Hamiltonian.
-    H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
-
-    # Generators of the SDP.
-    gens = [I, x, p, x^2, p^2, x*p]
-
-    # Number of time intervals.
-    T = 2
-
-    # Basis operators that appear.
-    basis = []
-    for g in gens
-        for g′ in gens
-            for b in keys((g*g′).terms)
-                if !(b in basis)
-                    push!(basis, b)
-                end
-            end
-        end
-    end
-
-    # The matrix that has to be p.s-d.
-    M = Matrix{BosonOperator}(undef, length(gens), length(gens))
-    for (i,g) in enumerate(gens)
-        for (j,g′) in enumerate(gens)
-            M[i,j] = g' * g
-        end
-    end
-
-    # Degrees of freedom in the matrix M.
-    m = let
-        m = Dict{Boson, Matrix{ComplexF64}}()
-        for op in basis
-            if op == Boson(0,0)
-                continue
-            end
-            mat = zeros(ComplexF64, (length(gens),length(gens)))
-            for i in 1:length(gens)
-                for j in 1:length(gens)
-                    if op in M[i,j]
-                        mat[i,j] += M[i,j][op]
-                    end
-                end
-            end
-            m[op] = mat
-        end
-        m
-    end
-
-    # Matrices for extracting basis expectation values.
-    E = let
-        E = Dict{Boson, Matrix{ComplexF64}}()
-        for b in keys(m)
-            mat = m[b]' / tr(m[b]'m[b])
-            E[b] = mat
-        end
-        E
-    end
-
-    # Algebraic identities. The list of returned matrices A is such that, at
-    # any time, tracing A with the matrix of expectation values yields zero.
-    # The remaining identity is that <1> = 1.
-    A,b = let
-        # Get orthogonal space (dual degrees of freedom)
-        A = Vector{Matrix{ComplexF64}}()
-        b = Vector{Float64}()
-        for i in 1:(length(gens)^2-length(m))
-            # Generate random Hermitian matrix.
-            mat = randn(ComplexF64, (length(gens),length(gens)))
-            mat = mat + mat'
-            # Orthogonalize against A and m
-            for a in Iterators.flatten([A,values(m)])
-                mat -= a * (tr(mat * a')) / (tr(a * a'))
-            end
-            # Normalize
-            mat = mat / sqrt(tr(mat' * mat))
-            push!(A, mat)
-            push!(b, 0.)
-        end
-
-        # Identity constraint
-        mat = zeros(ComplexF64, (length(gens), length(gens)))
-        mat[1,1] = 1.
-        push!(A, mat)
-        push!(b, 1.)
-        A,b
-    end
-
-    # Equations of motion.
-    C, D = let
-        # C is the matrix that plucks out the thing to be differentiated. D is
-        # the matrix that selects the derivative.
-        C = Vector{Matrix{ComplexF64}}()
-        D = Vector{Matrix{ComplexF64}}()
-        for b in keys(m)
-            op = Operator(b)
-            # Value
-            push!(C, E[b])
-            # Derivative
-            dop = 1im * (H*op - op*H)
-            mat = zeros(ComplexF64, length(gens), length(gens))
-            ok = true
-            for top in keys(dop.terms)
-                if top in keys(E)
-                    mat += dop[top] * E[top]
-                else
-                    ok = false
-                end
-            end
-            if ok
-                push!(D, mat)
-            end
-        end
-        C,D
-    end
-
-    # Construct the SDP.
-    sdp = CompositeSDP(1,[1])
-
-    sol = CONCAVE.IPM.solve(sdp; verbose=true)
-    println(sol)
 end
 
 function demo(::Val{:SpinRT})
