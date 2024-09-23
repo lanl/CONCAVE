@@ -1,3 +1,11 @@
+#=
+Outstanding questions
+
+Right now Λ! never uses B. That is, the delta-function at t=0 is just ignored.
+Can we get better bounds by not ignoring it?
+
+=#
+
 using ArgParse
 using LinearAlgebra: tr
 
@@ -11,6 +19,7 @@ struct AHOProgram <: ConvexProgram
     T::Float64
     K::Int
     N::Int
+    O::Matrix{ComplexF64}
     A::Vector{Matrix{ComplexF64}}
     B::Vector{Matrix{ComplexF64}}
     C::Vector{Matrix{ComplexF64}}
@@ -96,22 +105,26 @@ struct AHOProgram <: ConvexProgram
 
         # Boundary conditions
         B,b = let
-            # Initial conditions, determined quasi-manually.
-            initial = Dict{Boson, ComplexF64}()
-            for i in 0:12, j in 0:12
-                ψ = ψ₀
-                for n in 1:j
-                    ψ = ham.op["a"]*ψ
-                end
-                for n in 1:i
-                    ψ = ham.op["a"]'*ψ
-                end
-                initial[Boson(i,j)] = ψ₀'ψ
-            end
-
             B = Matrix{ComplexF64}[]
             b = Float64[]
-            # TODO
+            for bos in basis
+                ψ = ψ₀
+                for n in 1:bos.an
+                    ψ = ham.op["a"]*ψ
+                end
+                for n in 1:bos.cr
+                    ψ = ham.op["a"]'*ψ
+                end
+                val = ψ₀'ψ
+                mat = E[bos]
+                matp = conj(transpose(mat))
+                # Hermitian part
+                push!(B, (mat+matp)/2)
+                push!(b, real(ψ₀'ψ))
+                # Anti-Hermitian part
+                push!(B, -1im * (mat-matp)/2)
+                push!(b, imag(ψ₀'ψ))
+            end
             B,b
         end
 
@@ -141,13 +154,24 @@ struct AHOProgram <: ConvexProgram
             C,D
         end
 
-        new(T,K,N,A,B,C,D,a,b,sgn)
+        O = zeros(ComplexF64, (N,N))
+        for b in keys(x.terms)
+            O .+= x[b] * E[b]
+        end
+
+        new(T,K,N,O,A,B,C,D,a,b,sgn)
     end
 end
 
 function size(p::AHOProgram)::Int
-    # TODO
-    return 3
+    # At the initial time, there is one free parameter for each boundary value.
+    # At the late time, there are no free parameters.
+    r = length(p.B)
+    # In between, a quadratic spline.  The parameter K counts the number of
+    # knots.
+    r1 = length(p.A) + length(p.C)
+    r += (3 + p.K) * r1
+    return r
 end
 
 function initial(p::AHOProgram)::Vector{Float64}
@@ -161,18 +185,102 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     return r
 end
 
-function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64})::Matrix{ComplexF64}
+function qspline(t::Float64, T::Float64, a::Float64, b::Float64, c::Vector{Float64})::Float64
+    K = length(c)-1
+    f = a
+    f′ = b
+    f′′ = c[1]
+    c = c[2:end]
+    dt = T/(K+1)
+    for k in 1:K
+        # The time of the knot.
+        tk = k * T/(K+1)
+        if t < tk
+            # Time after last knot
+            t′ = t - tk + dt
+            return f + t′ * f′ + 0.5 * t′^2 * f′′
+        end
+        f = f + dt*f′
+        f′ = f′ + 0.5 * dt^2 * f′′
+    end
+    t′ = t - T + dt
+    return f + t′ * f′ + 0.5 * t′^2 * f′′
+end
+
+function dqspline(t::Float64, T::Float64, a::Float64, b::Float64, c::Vector{Float64})::Float64
+    K = length(c)-1
+    f = a
+    f′ = b
+    f′′ = c[1]
+    c = c[2:end]
+    dt = T/(K+1)
+    for k in 1:K
+        # The time of the knot.
+        tk = k * T/(K+1)
+        if t < tk
+            # Time after last knot
+            t′ = t - tk + dt
+            return f′ + t′ * f′′
+        end
+        f = f + dt*f′
+        f′ = f′ + 0.5 * dt^2 * f′′
+    end
+    t′ = t - T + dt
+    return t′ * f′ + t′ * f′′
+end
+
+function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
+    dΛ .= 0.
+    # Compute all coefficients with qsplit.
+    Λ = zeros(ComplexF64, (p.N,p.N))
+    # The "initial" value---at the late time T
+    Λ .+= p.O
+    y = y[1+length(p.B):end]
+    for (i,A) in enumerate(p.A)
+        a, b, c, y = y[1], y[2], y[3:3+p.K], y[4+p.K:end]
+        λ = qspline((p.T-t), p.T, a, b, c)
+        Λ .+= λ * A
+    end
+    for (i,C) in enumerate(p.C)
+        D = p.D[i]
+        a, b, c, y = y[1], y[2], y[3:3+p.K], y[4+p.K:end]
+        λ = qspline((p.T-t), p.T, a, b, c)
+        λ′ = dqspline((p.T-t), p.T, a, b, c)
+        Λ .+= λ * D
+        Λ .+= λ′ * C
+    end
+    return Λ
+end
+
+#=
+function Λ0!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64})::Matrix{ComplexF64}
+    dΛ .= 0.
     Λ = zeros(ComplexF64, (p.N,p.N))
     # TODO
     return Λ
 end
 
+function ΛT!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64})::Matrix{ComplexF64}
+    dΛ .= 0.
+    Λ = zeros(ComplexF64, (p.N,p.N))
+    # TODO
+    return Λ
+end
+=#
+
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
+    # Spline positivity
     for t in 0:0.01:p.T
-        Λ = Λ!(dΛ, p, y)
-        # TODO probably we should just be passing Λ into cb, right? cb should
-        # be a function, not a method...
+        Λ = Λ!(dΛ, p, y, t)
+        cb(Λ, dΛ)
+    end
+    if false
+        # Endpoint positivity
+        Λ = Λ0!(dΛ, p, y)
+        cb(Λ, dΛ)
+        Λ = ΛT!(dΛ, p, y)
+        cb(Λ, dΛ)
     end
 end
 
