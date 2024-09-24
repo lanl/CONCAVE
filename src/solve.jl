@@ -26,6 +26,7 @@ struct AHOProgram <: ConvexProgram
     D::Vector{Matrix{ComplexF64}}
     a::Vector{Float64}
     b::Vector{Float64}
+    c0::Vector{ComplexF64}
     sgn::Float64
 
     function AHOProgram(ω, λ, T, K, sgn)
@@ -36,11 +37,11 @@ struct AHOProgram <: ConvexProgram
         ψ₀ = ψ₀ / (ψ₀'ψ₀)
 
         # Construct algebra, Hamiltonian, et cetera
-        I,x,p = let
+        I,x,p,an = let
             I,c = BosonAlgebra()
             x = sqrt(1/(2*ω)) * (c + c')
             p = 1im * sqrt(ω/2) * (c' - c)
-            I,x,p
+            I,x,p,c
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
         gens = [I, x, p, x^2, p^2, x*p]
@@ -129,11 +130,12 @@ struct AHOProgram <: ConvexProgram
         end
 
         # Equations of motion
-        C,D = let
+        C,D,c0 = let
             # C is the matrix that plucks out the thing to be differentiated. D is
             # the matrix that selects the derivative.
             C = Matrix{ComplexF64}[]
             D = Matrix{ComplexF64}[]
+            c0 = ComplexF64[]
             for b in basis
                 op = Operator(b)
                 dop = 1im * (H*op - op*H)
@@ -149,9 +151,19 @@ struct AHOProgram <: ConvexProgram
                 if ok
                     push!(C, E[b])
                     push!(D, mat)
+                    ψ = ψ₀
+                    O = I
+                    for i in 1:b.cr
+                        O = O * an'
+                    end
+                    for i in 1:b.an
+                        O = O * an
+                    end
+                    psi = O*ψ
+                    push!(c0, ψ₀'ψ)
                 end
             end
-            C,D
+            C,D,c0
         end
 
         O = zeros(ComplexF64, (N,N))
@@ -159,7 +171,7 @@ struct AHOProgram <: ConvexProgram
             O .+= x[b] * E[b]
         end
 
-        new(T,K,N,O,A,B,C,D,a,b,sgn)
+        new(T,K,N,O,A,B,C,D,a,b,c0,sgn)
     end
 end
 
@@ -181,10 +193,22 @@ end
 function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     g .= 0.0
     r = 0.0
-    # TODO
+    y = y[1+length(p.B):end]
+    # Algebra integrals
+    for (i,ai) in enumerate(p.a)
+        a, b, c, y = y[1], y[2], y[3:3+p.K], y[4+p.K:end]
+        r += -ai * iqspline(p.T, a, b, c)
+    end
+    # Boundary values
+    for (k,C) in enumerate(p.C)
+        a, b, c, y = y[1], y[2], y[3:3+p.K], y[4+p.K:end]
+        λ = qspline(p.T, p.T, a, b, c)
+        r += λ * p.c0[k]
+    end
     return r
 end
 
+# Evaluate quadratic spline.
 function qspline(t::Float64, T::Float64, a::Float64, b::Float64, c::Vector{Float64})::Float64
     K = length(c)-1
     f = a
@@ -207,6 +231,7 @@ function qspline(t::Float64, T::Float64, a::Float64, b::Float64, c::Vector{Float
     return f + t′ * f′ + 0.5 * t′^2 * f′′
 end
 
+# Evaluate the derivative of a quadratic spline.
 function dqspline(t::Float64, T::Float64, a::Float64, b::Float64, c::Vector{Float64})::Float64
     K = length(c)-1
     f = a
@@ -227,6 +252,25 @@ function dqspline(t::Float64, T::Float64, a::Float64, b::Float64, c::Vector{Floa
     end
     t′ = t - T + dt
     return t′ * f′ + t′ * f′′
+end
+
+# Integrate a quadratic spline
+function iqspline(T::Float64, a::Float64, b::Float64, c::Vector{Float64})::Float64
+    K = length(c)-1
+    f = a
+    f′ = b
+    f′′ = c[1]
+    c = c[2:end]
+    dt = T/(K+1)
+    # Integral to the first knot.
+    r = dt * f + dt^2 * f′ / 2 + dt^3 * f′′ / 6
+    for k in 1:K
+        # Add the integral to the next knot.
+        f = f + dt*f′
+        f′ = f′ + 0.5 * dt^2 * f′′
+        r += dt * f + dt^2 * f′ / 2 + dt^3 * f′′ / 6
+    end
+    return r
 end
 
 function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
