@@ -11,6 +11,7 @@ using LinearAlgebra: tr
 
 using CONCAVE
 
+import Base: size
 import CONCAVE.Programs: initial, constraints!, objective!
 
 demo(s::Symbol) = demo(Val(s))
@@ -152,7 +153,10 @@ struct AHOProgram <: ConvexProgram
                     push!(C, E[b])
                     push!(D, mat)
                     ψ = ψ₀
-                    O = I
+                    O = zero(ham.H)
+                    for i in 1:size(O)[1]
+                        O[i,i] = 1.0 + 0.0im
+                    end
                     for i in 1:b.cr
                         O = O * an'
                     end
@@ -274,6 +278,7 @@ function iqspline(T::Float64, a::Float64, b::Float64, c::Vector{Float64})::Float
 end
 
 function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
+    # dΛ has shape (N,N,size(p))
     dΛ .= 0.
     # Compute all coefficients with qsplit.
     Λ = zeros(ComplexF64, (p.N,p.N))
@@ -282,16 +287,19 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
     y = y[1+length(p.B):end]
     for (i,A) in enumerate(p.A)
         a, b, c, y = y[1], y[2], y[3:3+p.K], y[4+p.K:end]
-        λ = qspline((p.T-t), p.T, a, b, c)
+        λ, da, db, dc = qspline((p.T-t), p.T, a, b, c)
         Λ .+= λ * A
+        # TODO dΛ
+        #dΛ[:,:,i]
     end
     for (i,C) in enumerate(p.C)
         D = p.D[i]
         a, b, c, y = y[1], y[2], y[3:3+p.K], y[4+p.K:end]
-        λ = qspline((p.T-t), p.T, a, b, c)
-        λ′ = dqspline((p.T-t), p.T, a, b, c)
+        λ, da, db, dc = qspline((p.T-t), p.T, a, b, c)
+        λ′, da′, db′, dc′ = dqspline((p.T-t), p.T, a, b, c)
         Λ .+= λ * D
         Λ .+= λ′ * C
+        # TODO dΛ
     end
     return Λ
 end

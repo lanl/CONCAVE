@@ -19,6 +19,7 @@ include("algebra.jl")
 include("unconstrained.jl")
 include("ipm.jl")
 include("hamiltonians.jl")
+include("splines.jl")
 
 using .Programs
 using .Algebras
