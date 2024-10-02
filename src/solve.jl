@@ -186,18 +186,22 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     o::Int = 0
     # Algebra integrals
     for (i,ai) in enumerate(p.a)
-        spline.c = y[1:3+p.K], y[4+p.K:end]
+        spline.c = y[1+o:3+p.K+o]
         at!(spline, p.T)
         r += -ai * spline.∫
-        # TODO gradient
+        for (j,∂) in enumerate(spline.∂∫)
+            g[o+j] += -ai*∂
+        end
         o += 3+p.K
     end
     # Boundary values
     for (k,C) in enumerate(p.C)
-        spline.c, y = y[1:3+p.K], y[4+p.K:end]
+        spline.c = y[1+o:3+p.K+o]
         at!(spline, p.T)
         r += spline.f * p.c0[k]
-        # TODO gradient
+        for (j,∂) in enumerate(spine.∂c)
+            g[o+j] += p.c0[k] * ∂
+        end
         o += 3+p.K
     end
     return r
@@ -206,26 +210,32 @@ end
 function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
     # dΛ has shape (N,N,size(p))
     dΛ .= 0.
-    # Compute all coefficients with qsplit.
     Λ = zeros(ComplexF64, (p.N,p.N))
     # The "initial" value---at the late time T
     Λ .+= p.O
-    y = y[1+length(p.B):end]
+    o::Int = 0
     for (i,A) in enumerate(p.A)
-        a, b, c, y = y[1], y[2], y[3:3+p.K], y[4+p.K:end]
-        λ, da, db, dc = qspline((p.T-t), p.T, a, b, c)
-        Λ .+= λ * A
-        # TODO dΛ
-        #dΛ[:,:,i]
+        spline.c = y[1+o:3+p.K+o]
+        at!(spline, p.T)
+        Λ .+= spline.f * A
+        for (j,∂) in enumerate(spine.∂c)
+            dΛ[:,:,j+o] .+= A * ∂
+        end
+        o += 3+p.K
     end
     for (i,C) in enumerate(p.C)
         D = p.D[i]
-        a, b, c, y = y[1], y[2], y[3:3+p.K], y[4+p.K:end]
-        λ, da, db, dc = qspline((p.T-t), p.T, a, b, c)
-        λ′, da′, db′, dc′ = dqspline((p.T-t), p.T, a, b, c)
-        Λ .+= λ * D
-        Λ .+= λ′ * C
-        # TODO dΛ
+        spline.c = y[1+o:3+p.K+o]
+        at!(spline, p.T)
+        Λ .+= spline.f * D
+        Λ .+= spline.f′ * C
+        for j in 1:length(spline.∂c)
+            ∂ = spline.∂c[j]
+            ∂′ = spline.∂c′[j]
+            dΛ[:,:,j+o] .+= ∂ * D
+            dΛ[:,:,j+o] .+= ∂′ * C
+        end
+        o += 3+p.K
     end
     return Λ
 end
