@@ -17,10 +17,22 @@ end
 
 @testset "random quadratic splines" begin
     for n in 1:100
-        k = rand(1:20)
+        K = rand(1:20)
         T = rand()*50
         x = rand()*T
-        spline = QuadraticSpline(T, k)
+        spline = QuadraticSpline(T, K)
+        rand!(spline.c)
+
+        t = rand()*T
+
+        ϵ = 1e-4
+        at!(spline, t)
+        f = spline.f
+        at!(spline, t-ϵ)
+        ∫₋ = spline.∫
+        at!(spline, t+ϵ)
+        ∫₊ = spline.∫
+        @test abs((∫₊ - ∫₋)/(2*ϵ) - f)/abs(f) < 1e-4
     end
 end
 

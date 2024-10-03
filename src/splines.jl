@@ -42,26 +42,39 @@ mutable struct QuadraticSpline
 end
 
 function at!(s::QuadraticSpline, t::Float64)
-    i = 0
+    s.∫ = 0.
+    s.∂c .= 0.
+    s.∂c′ .= 0.
+    s.∂∫ .= 0.
+
+    o = 0
     function coef()
-        i += 1
-        return s.c[i]
+        o += 1
+        return s.c[o]
     end
-    f = coef()
-    f′ = coef()
+
+    s.f = coef()
+    s.f′ = coef()
     f′′ = coef()
     t′ = 0
+    function advance(dt::Float64)
+        s.∫ += f′′ * dt^3 / 6 + s.f′ * dt^2 / 2 + s.f * dt
+        # TODO ∂∫
+        s.f += dt * s.f′ + f′′ * dt^2 / 2
+        # TODO ∂c
+        s.f′ += dt * f′′
+        # TODO ∂c′
+        t′ += dt
+    end
     for k in 1:s.K
-        if t < c.x[k]
+        if t < s.x[k]
+            advance(t - t′)
             return
         end
-        dt = c.x[k] - t′
-        t′ = c.x[k]
-        f = dt*f′
-        f′ = dt*f′′
+        advance(s.x[k] - t′)
         f′′ = coef()
     end
-    # TODO
+    advance(t - t′)
 end
 
 end
