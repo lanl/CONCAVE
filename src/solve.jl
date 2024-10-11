@@ -2,6 +2,7 @@ using ArgParse
 using LinearAlgebra: tr
 
 using CONCAVE
+using CONCAVE.Splines
 
 import Base: size
 import CONCAVE.Programs: initial, constraints!, objective!
@@ -199,7 +200,7 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
         spline.c = y[1+o:3+p.K+o]
         at!(spline, p.T)
         r += spline.f * p.c0[k]
-        for (j,∂) in enumerate(spine.∂c)
+        for (j,∂) in enumerate(spline.∂c)
             g[o+j] += p.c0[k] * ∂
         end
         o += 3+p.K
@@ -210,6 +211,7 @@ end
 function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
     # dΛ has shape (N,N,size(p))
     dΛ .= 0.
+    spline = QuadraticSpline(p.T, p.K)
     Λ = zeros(ComplexF64, (p.N,p.N))
     # The "initial" value---at the late time T
     Λ .+= p.O
@@ -218,7 +220,7 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
         spline.c = y[1+o:3+p.K+o]
         at!(spline, p.T)
         Λ .+= spline.f * A
-        for (j,∂) in enumerate(spine.∂c)
+        for (j,∂) in enumerate(spline.∂c)
             dΛ[:,:,j+o] .+= A * ∂
         end
         o += 3+p.K

@@ -23,17 +23,18 @@ function barrier!(g, p, y::Vector{Float64})::Float64
     N = length(g)
     r::Float64 = 0.
     g .= 0.
-    constraints!(p, y) do M,g′
+    constraints!(p, y) do M,D
         F = eigen(Hermitian(M))
         if minimum(F.values) ≤ 0
             r = Inf
         end
         if r < Inf
             # We just use the minimum eigenvalue.
-            r += -log(F.values[1])
+            f = F.values[1]
+            r += -log(f)
+            v = F.vectors[:,1]
             for n in 1:N
-                # TODO
-                g[n] -= g′[n] / f
+                g[n] -= (v' * D[:,:,n] * v)/f
             end
         end
     end
@@ -64,12 +65,17 @@ function objective!(g, p::Phase1, y::Vector{Float64})::Float64
 end
 
 function constraints!(cb, p::Phase1, y::Vector{Float64})
+    N = length(y)-1
     s = y[1]
-    constraints!(p.cp, y[2:end]) do M,g
-        # TODO
+    constraints!(p.cp, y[2:end]) do M,D
+        F = eigen(Hermitian(M))
+        f = F.values[1]
+        v = F.vectors[:,1]
         g′ = zeros(Float64, length(g)+1)
         g′[1] = 1.
-        g′[2:end] .= g
+        for n in 1:N
+            g′[1+n] = v' * D[:,:,n] * v
+        end
         cb(s+f, g′)
     end
 end
@@ -79,17 +85,25 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
         println(stderr, "Finding feasible initial point...")
     end
 
+    N = size(prog)
     y = initial(prog)
     g = zero(y)
 
     minimize!(BFGS, y) do g, y
         r::Float64 = 0.
         g .= 0.0
-        constraints!(prog, y) do M,g′
-            # TODO
+        constraints!(prog, y) do M,D
+            if any(isinf.(M)) || any(isnan.(M))
+                r = Inf
+                return
+            end
+            F = eigen(Hermitian(M))
+            f = F.values[1]
             if f ≤ 0
                 r -= f
-                g .-= g′
+                for n in 1:N
+                    g[n] -= v' * D[:,:,n] * v
+                end
             end
         end
         return r
