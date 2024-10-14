@@ -34,7 +34,7 @@ function barrier!(g, p, y::Vector{Float64})::Float64
             r += -log(f)
             v = F.vectors[:,1]
             for n in 1:N
-                g[n] -= (v' * D[:,:,n] * v)/f
+                g[n] -= real(v' * D[:,:,n] * v)/f
             end
         end
     end
