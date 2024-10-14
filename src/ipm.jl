@@ -103,7 +103,7 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
             if f ≤ 0
                 r -= f
                 for n in 1:N
-                    g[n] -= v' * D[:,:,n] * v
+                    g[n] -= real(v' * D[:,:,n] * v)
                 end
             end
         end
