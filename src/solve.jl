@@ -265,7 +265,7 @@ end
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
-    for t in 0:0.01:p.T
+    for t in 0:0.1:p.T
         Λ = Λ!(dΛ, p, y, t)
         cb(Λ, dΛ)
     end
@@ -298,7 +298,7 @@ function demo(::Val{:RT})
         hi, yhi = CONCAVE.IPM.solve(phi; verbose=true)
 
         if -lo > hi
-            println(stderr, "WARNING: primal provel infeasible")
+            println(stderr, "WARNING: primal proved infeasible")
         end
 
         println("$t $ex $(-lo) $hi")
