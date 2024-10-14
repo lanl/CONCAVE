@@ -297,6 +297,10 @@ function demo(::Val{:RT})
         lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
         hi, yhi = CONCAVE.IPM.solve(phi; verbose=true)
 
+        if -lo > hi
+            println(stderr, "WARNING: primal provel infeasible")
+        end
+
         println("$t $ex $(-lo) $hi")
         ψ = U * ψ
     end
