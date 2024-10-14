@@ -99,6 +99,7 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
             end
             F = eigen(Hermitian(M))
             f = F.values[1]
+            v = F.vectors[:,1]
             if f ≤ 0
                 r -= f
                 for n in 1:N

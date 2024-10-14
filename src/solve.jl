@@ -60,7 +60,7 @@ struct AHOProgram <: ConvexProgram
             end
         end
         # Degrees of freedom, and matrices for plucking out expectation values
-        m,E = let
+        m′,E = let
             m = Dict{Boson, Matrix{ComplexF64}}()
             E = Dict{Boson, Matrix{ComplexF64}}()
             for op in basis
@@ -75,6 +75,22 @@ struct AHOProgram <: ConvexProgram
             end
             m,E
         end
+        # Hermitian basis for the degrees of freedom.
+        m = let
+            m = Matrix{ComplexF64}[]
+            for mat′ in values(m′)
+                # Hermitize
+                mat = 0.5 * (mat′' + mat′)
+                # Orthogonalize
+                for a in m
+                    mat -= a * tr(mat * a') / tr(a * a')
+                end
+                if (sum(abs.(mat))) ≉ 0
+                    push!(m, mat)
+                end
+            end
+            m
+        end
 
         # Algebraic identities
         A,a = let
@@ -86,7 +102,7 @@ struct AHOProgram <: ConvexProgram
                 mat = mat + mat'
                 # Orthogonalize against A and m
                 for a in Iterators.flatten([A,values(m)])
-                    mat -= a * (tr(mat * a')) / (tr(a * a'))
+                    mat -= a * tr(mat * a') / tr(a * a')
                 end
                 # Normalize
                 mat = mat / sqrt(tr(mat' * mat))
