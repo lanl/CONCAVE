@@ -106,6 +106,9 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
                 end
             end
         end
+        if verbose
+            println(stderr, "    $r")
+        end
         return r
     end
 

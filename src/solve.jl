@@ -42,7 +42,11 @@ struct AHOProgram <: ConvexProgram
         N = length(gens)
         basis = []
         for g in gens, g′ in gens
-            for b in keys((g*g′).terms)
+            p = g′' * g
+            for b in keys(p.terms)
+                if p[b] ≈ 0
+                    continue
+                end
                 if !(b in basis)
                     push!(basis, b)
                 end
@@ -52,7 +56,7 @@ struct AHOProgram <: ConvexProgram
         M = Matrix{BosonOperator}(undef, length(gens), length(gens))
         for (i,g) in enumerate(gens)
             for (j,g′) in enumerate(gens)
-                M[i,j] = g' * g
+                M[i,j] = g' * g′
             end
         end
         # Degrees of freedom, and matrices for plucking out expectation values
@@ -274,8 +278,8 @@ function demo(::Val{:RT})
 
         plo = AHOProgram(ω, λ, T, K, 1.0)
         phi = AHOProgram(ω, λ, T, K, -1.0)
-        lo, ylo = CONCAVE.IPM.solve(plo; verbose=false)
-        hi, yhi = CONCAVE.IPM.solve(phi; verbose=false)
+        lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
+        hi, yhi = CONCAVE.IPM.solve(phi; verbose=true)
 
         println("$t $ex $(-lo) $hi")
         ψ = U * ψ
