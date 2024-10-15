@@ -265,7 +265,7 @@ end
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
-    for t in 0:0.1:p.T
+    for t in 0:0.02:p.T
         Λ = Λ!(dΛ, p, y, t)
         cb(Λ, dΛ)
     end
@@ -276,7 +276,7 @@ function demo(::Val{:RT})
     ω = 1.
     λ = 1.0
     T = 5.0
-    K = 2
+    K = 0
 
     # For diagonalizing.
     dt = 1e-1
