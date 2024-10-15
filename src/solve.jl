@@ -193,7 +193,7 @@ struct AHOProgram <: ConvexProgram
 end
 
 function size(p::AHOProgram)::Int
-    return (length(p.A) + length(p.C)) * (3 + p.K)
+    return (length(p.A) + length(p.C)) * (2 + p.K)
 end
 
 function initial(p::AHOProgram)::Vector{Float64}
@@ -207,23 +207,23 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     o::Int = 0
     # Algebra integrals
     for (i,ai) in enumerate(p.a)
-        spline.c = y[1+o:3+p.K+o]
+        spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T)
         r += -ai * spline.∫
-        for (j,∂) in enumerate(spline.∂∫)
+        for (j,∂) in enumerate(spline.∂∫[2:end])
             g[o+j] += -ai*∂
         end
-        o += 3+p.K
+        o += 2+p.K
     end
     # Boundary values
     for (k,C) in enumerate(p.C)
-        spline.c = y[1+o:3+p.K+o]
+        spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T)
         r += spline.f * p.c0[k]
-        for (j,∂) in enumerate(spline.∂c)
+        for (j,∂) in enumerate(spline.∂c[2:end])
             g[o+j] += p.c0[k] * ∂
         end
-        o += 3+p.K
+        o += 2+p.K
     end
     return r
 end
@@ -237,27 +237,27 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
     Λ .+= p.O
     o::Int = 0
     for (i,A) in enumerate(p.A)
-        spline.c = y[1+o:3+p.K+o]
+        spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T)
         Λ .+= spline.f * A
-        for (j,∂) in enumerate(spline.∂c)
+        for (j,∂) in enumerate(spline.∂c[2:end])
             dΛ[:,:,j+o] .+= A * ∂
         end
-        o += 3+p.K
+        o += 2+p.K
     end
     for (i,C) in enumerate(p.C)
         D = p.D[i]
-        spline.c = y[1+o:3+p.K+o]
+        spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T)
         Λ .+= spline.f * D
         Λ .+= spline.f′ * C
-        for j in 1:length(spline.∂c)
+        for j in 2:length(spline.∂c)
             ∂ = spline.∂c[j]
             ∂′ = spline.∂c′[j]
-            dΛ[:,:,j+o] .+= ∂ * D
-            dΛ[:,:,j+o] .+= ∂′ * C
+            dΛ[:,:,j+o-1] .+= ∂ * D
+            dΛ[:,:,j+o-1] .+= ∂′ * C
         end
-        o += 3+p.K
+        o += 2+p.K
     end
     return Λ
 end
