@@ -289,7 +289,8 @@ function demo(::Val{:RT})
     ψ₀ = copy(ψ)
     U = CONCAVE.Hamiltonians.evolution(ham, dt)
 
-    for t in 0:dt:T
+    for t in dt:dt:T
+        ψ = U*ψ
         ex = real(ψ' * ham.op["x"] * ψ)
 
         plo = AHOProgram(ω, λ, T, K, 1.0)
