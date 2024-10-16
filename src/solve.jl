@@ -197,7 +197,7 @@ struct AHOProgram <: ConvexProgram
 end
 
 function size(p::AHOProgram)::Int
-    return (length(p.A) + length(p.C)) * (2 + p.K)
+    return length(p.A) * (3 + p.K) + length(p.C) * (2 + p.K)
 end
 
 function initial(p::AHOProgram)::Vector{Float64}
@@ -211,13 +211,13 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     o::Int = 0
     # Algebra integrals
     for (i,ai) in enumerate(p.a)
-        spline.c[2:end] = y[1+o:2+p.K+o]
+        spline.c[1:end] = y[1+o:3+p.K+o]
         at!(spline, p.T)
         r += -ai * spline.∫
-        for (j,∂) in enumerate(spline.∂∫[2:end])
+        for (j,∂) in enumerate(spline.∂∫[1:end])
             g[o+j] += -ai*∂
         end
-        o += 2+p.K
+        o += 3+p.K
     end
     # Boundary values
     for (k,C) in enumerate(p.C)
@@ -241,18 +241,18 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
     Λ .+= p.O
     o::Int = 0
     for (i,A) in enumerate(p.A)
-        spline.c[2:end] = y[1+o:2+p.K+o]
-        at!(spline, p.T)
+        spline.c[1:end] = y[1+o:3+p.K+o]
+        at!(spline, p.T-t)
         Λ .+= spline.f * A
-        for (j,∂) in enumerate(spline.∂c[2:end])
+        for (j,∂) in enumerate(spline.∂c[1:end])
             dΛ[:,:,j+o] .+= A * ∂
         end
-        o += 2+p.K
+        o += 3+p.K
     end
     for (i,C) in enumerate(p.C)
         D = p.D[i]
         spline.c[2:end] = y[1+o:2+p.K+o]
-        at!(spline, p.T)
+        at!(spline, p.T-t)
         Λ .+= spline.f * D
         Λ .+= spline.f′ * C
         for j in 2:length(spline.∂c)
@@ -313,8 +313,9 @@ function demo(::Val{:RT}, verbose)
             bar₊ = CONCAVE.IPM.barrier!(g′, p1, z₊)
             bar₋ = CONCAVE.IPM.barrier!(g′, p1, z₋)
             gest = (bar₊ - bar₋)/(2*ϵ)
-            println(gest, "     ", g[i], "    ", (gest-g[i])/gest)
-            if (gest-g[i]) / gest > 1e-4
+            rerr = abs((gest-g[i])/(gest+1e-4))
+            println(gest, "     ", g[i], "    ", rerr)
+            if rerr > 1e-4
                 println("WARNING")
             end
         end
@@ -339,8 +340,9 @@ function demo(::Val{:RT}, verbose)
             bar₊ = CONCAVE.IPM.barrier!(g′, plo, y₊)
             bar₋ = CONCAVE.IPM.barrier!(g′, plo, y₋)
             gest = (bar₊ - bar₋)/(2*ϵ)
-            println(gest, "     ", g[i], "    ", (gest-g[i])/gest)
-            if (gest-g[i]) / gest > 1e-4
+            rerr = abs((gest-g[i])/(gest + 1e-4))
+            println(gest, "     ", g[i], "    ", rerr)
+            if rerr > 1e-4
                 println("WARNING")
             end
         end
