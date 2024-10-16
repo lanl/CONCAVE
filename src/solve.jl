@@ -7,7 +7,7 @@ using CONCAVE.Splines
 import Base: size
 import CONCAVE.Programs: initial, constraints!, objective!
 
-demo(s::Symbol) = demo(Val(s))
+demo(s::Symbol; verbose=false) = demo(Val(s), verbose)
 
 struct AHOProgram <: ConvexProgram
     T::Float64
@@ -38,7 +38,8 @@ struct AHOProgram <: ConvexProgram
             I,x,p,c
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
-        gens = [I, x, p, x^2, p^2, x*p]
+        gens = [I, x, p, x^2]
+        #gens = [I, x, p, x^2, p^2, x*p]
         N = length(gens)
         basis = []
         for g in gens, g′ in gens
@@ -52,6 +53,7 @@ struct AHOProgram <: ConvexProgram
                 end
             end
         end
+
         # The matrix of operators
         M = Matrix{BosonOperator}(undef, length(gens), length(gens))
         for (i,g) in enumerate(gens)
@@ -80,13 +82,14 @@ struct AHOProgram <: ConvexProgram
             m = Matrix{ComplexF64}[]
             for mat′ in values(m′)
                 # Hermitize
-                mat = 0.5 * (mat′' + mat′)
-                # Orthogonalize
-                for a in m
-                    mat -= a * tr(mat * a') / tr(a * a')
-                end
-                if (sum(abs.(mat))) ≉ 0
-                    push!(m, mat)
+                for mat in [0.5 * (mat′' + mat′), 0.5im * (mat′' - mat′)]
+                    # Orthogonalize
+                    for a in m
+                        mat -= a * tr(mat * a') / tr(a * a')
+                    end
+                    if (sum(abs.(mat))) ≉ 0
+                        push!(m, mat)
+                    end
                 end
             end
             m
@@ -96,7 +99,13 @@ struct AHOProgram <: ConvexProgram
         A,a = let
             A = Matrix{ComplexF64}[]
             b = Float64[]
-            for i in 1:(length(gens)^2-length(m))
+            # Identity constraint
+            mat = zeros(ComplexF64, (length(gens), length(gens)))
+            mat[1,1] = 1.
+            push!(A, mat)
+            push!(b, 1.)
+
+            for i in 1:(length(gens)^2-length(m)-1)
                 # Generate random Hermitian matrix.
                 mat = randn(ComplexF64, (length(gens),length(gens)))
                 mat = mat + mat'
@@ -110,11 +119,6 @@ struct AHOProgram <: ConvexProgram
                 push!(b, 0.)
             end
 
-            # Identity constraint
-            mat = zeros(ComplexF64, (length(gens), length(gens)))
-            mat[1,1] = 1.
-            push!(A, mat)
-            push!(b, 1.)
             A,b
         end
 
@@ -265,13 +269,13 @@ end
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
-    for t in 0:0.02:p.T
+    for t in 0:0.01:p.T
         Λ = Λ!(dΛ, p, y, t)
         cb(Λ, dΛ)
     end
 end
 
-function demo(::Val{:RT})
+function demo(::Val{:RT}, verbose)
     # Parameters.
     ω = 1.
     λ = 1.0
@@ -289,12 +293,98 @@ function demo(::Val{:RT})
     ψ₀ = copy(ψ)
     U = CONCAVE.Hamiltonians.evolution(ham, dt)
 
+    if false
+        plo = AHOProgram(ω, λ, T, K, 1.0)
+        phi = AHOProgram(ω, λ, T, K, -1.0)
+        p1 = CONCAVE.IPM.Phase1(phi)
+        z = initial(p1)
+        @assert CONCAVE.IPM.feasible(p1, z)
+        ϵ = 1e-4
+        g = zero(z)
+        g′ = zero(z)
+        bar = CONCAVE.IPM.barrier!(g, p1, z)
+        for i in 1:length(z)
+            z₊ = zero(z)
+            z₊ .= z
+            z₊[i] += ϵ
+            z₋ = zero(z)
+            z₋ .= z
+            z₋[i] -= ϵ
+            bar₊ = CONCAVE.IPM.barrier!(g′, p1, z₊)
+            bar₋ = CONCAVE.IPM.barrier!(g′, p1, z₋)
+            gest = (bar₊ - bar₋)/(2*ϵ)
+            println(gest, "     ", g[i], "    ", (gest-g[i])/gest)
+            if (gest-g[i]) / gest > 1e-4
+                println("WARNING")
+            end
+        end
+        exit(0)
+    end
+
+    if false
+        # Check phase-2 derivatives (barrier).
+        plo = AHOProgram(ω, λ, T, K, 1.0)
+        y = CONCAVE.IPM.feasible_initial(plo)
+        ϵ = 1e-4
+        g = zero(y)
+        g′ = zero(y)
+        bar = CONCAVE.IPM.barrier!(g, plo, y)
+        for i in 1:length(y)
+            y₊ = zero(y)
+            y₊ .= y
+            y₊[i] += ϵ
+            y₋ = zero(y)
+            y₋ .= y
+            y₋[i] -= ϵ
+            bar₊ = CONCAVE.IPM.barrier!(g′, plo, y₊)
+            bar₋ = CONCAVE.IPM.barrier!(g′, plo, y₋)
+            gest = (bar₊ - bar₋)/(2*ϵ)
+            println(gest, "     ", g[i], "    ", (gest-g[i])/gest)
+            if (gest-g[i]) / gest > 1e-4
+                println("WARNING")
+            end
+        end
+        exit(0)
+    end
+
+    if false
+        # Check phase-2 derivatives (objective).
+        plo = AHOProgram(ω, λ, T, K, 1.0)
+        y = CONCAVE.IPM.feasible_initial(plo)
+        ϵ = 1e-4
+        g = zero(y)
+        g′ = zero(y)
+        obj = CONCAVE.IPM.objective!(g, plo, y)
+        for i in 1:length(y)
+            y₊ = zero(y)
+            y₊ .= y
+            y₊[i] += ϵ
+            y₋ = zero(y)
+            y₋ .= y
+            y₋[i] -= ϵ
+            obj₊ = CONCAVE.IPM.objective!(g′, plo, y₊)
+            obj₋ = CONCAVE.IPM.objective!(g′, plo, y₋)
+            gest = (obj₊ - obj₋)/(2*ϵ)
+            println(gest, "     ", g[i], "    ", (gest-g[i])/(1e-5 + gest))
+            if (gest-g[i]) / gest > 1e-4
+                println("WARNING")
+            end
+        end
+        exit(0)
+    end
+
     for t in dt:dt:T
         ψ = U*ψ
         ex = real(ψ' * ham.op["x"] * ψ)
 
         plo = AHOProgram(ω, λ, T, K, 1.0)
         phi = AHOProgram(ω, λ, T, K, -1.0)
+
+        if verbose
+            println("Algebraic constraints: ", length(plo.A))
+            println("Derivatives: ", length(plo.C))
+        end
+
         lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
         hi, yhi = CONCAVE.IPM.solve(phi; verbose=true)
 
@@ -307,7 +397,7 @@ function demo(::Val{:RT})
     end
 end
 
-function demo(::Val{:SpinRT})
+function demo(::Val{:SpinRT}, verbose)
     # Parameters.
     J = 1.
 
@@ -317,7 +407,7 @@ function demo(::Val{:SpinRT})
     # Build the Hamiltonian.
 end
 
-function demo(::Val{:ScalarRT})
+function demo(::Val{:ScalarRT}, verbose)
     # Parameters
     N = 5
 
@@ -343,7 +433,7 @@ end
 function constraints!(cb, p::HubbardRTProgram, y::Vector{Float64})
 end
 
-function demo(::Val{:HubbardRT})
+function demo(::Val{:HubbardRT}, verbose)
     # Parameters
     N = 10
 
@@ -352,7 +442,7 @@ function demo(::Val{:HubbardRT})
     # Build the Hamiltonian.
 end
 
-function demo(::Val{:Neutrons})
+function demo(::Val{:Neutrons}, verbose)
     # Parameters.
 
     # Construct operators.
@@ -360,13 +450,13 @@ function demo(::Val{:Neutrons})
     # Build the Hamiltonian.
 end
 
-function demo(::Val{:Thermo})
+function demo(::Val{:Thermo}, verbose)
 end
 
-function demo(::Val{:SpinThermo})
+function demo(::Val{:SpinThermo}, verbose)
 end
 
-function demo(::Val{:Coulomb})
+function demo(::Val{:Coulomb}, verbose)
 end
 
 function main()
@@ -374,13 +464,15 @@ function main()
         s = ArgParseSettings()
         @add_arg_table s begin
             "--demo"
-            arg_type = Symbol
+                arg_type = Symbol
+            "-v","--verbose"
+                action = :store_true
         end
         parse_args(s)
     end
 
     if !isnothing(args["demo"])
-        demo(args["demo"])
+        demo(args["demo"]; verbose=args["verbose"])
         return
     end
 end

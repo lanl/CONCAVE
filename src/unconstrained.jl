@@ -171,7 +171,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
         den = v' * d
         den += 1e-8  # Crude damping
         H = H + (v' * d + d' * H * d) * (v * v') / den^2 - (H * d * v' + v * d' * H) / den
-        if rand() < 1e-9 && false
+        if rand() < 1 && false
             F = eigen(Hermitian(H))
             println("   DUMPING INVERSE-HESSIAN EIGENDECOMPOSITION")
             println("     VALUES: ", F.values)

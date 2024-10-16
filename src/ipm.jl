@@ -2,6 +2,8 @@ module IPM
 
 using LinearAlgebra
 
+import Base: size
+
 using ..Programs
 using ..UnconstrainedOptimization
 
@@ -11,9 +13,17 @@ export solve
 
 function feasible(p, y)::Bool
     ok = true
-    constraints!(p, y) do M,g
-        if minimum(eigvals(Hermitian(M))) < 0
-            ok = false
+    constraints!(p, y) do f,g
+        if f isa Matrix
+            if minimum(eigvals(Hermitian(f))) < 0
+                ok = false
+            end
+        elseif f isa Real
+            if f < 0
+                ok = false
+            end
+        else
+            throw(ArgumentError("Expected Real or Matrix"))
         end
     end
     return ok
@@ -23,7 +33,8 @@ function barrier!(g, p, y::Vector{Float64})::Float64
     N = length(g)
     r::Float64 = 0.
     g .= 0.
-    constraints!(p, y) do M,D
+
+    function cb(M::Matrix, D)
         F = eigen(Hermitian(M))
         if minimum(F.values) ≤ 0
             r = Inf
@@ -38,6 +49,20 @@ function barrier!(g, p, y::Vector{Float64})::Float64
             end
         end
     end
+
+    function cb(f::Real, d)
+        if f ≤ 0
+            r = Inf
+        end
+        if r < Inf
+            r += -log(f)
+            for n in 1:N
+                g[n] -= d[n]/f
+            end
+        end
+    end
+
+    constraints!(cb, p, y)
     return r
 end
 
@@ -45,14 +70,26 @@ struct Phase1 <: ConvexProgram
     cp::ConvexProgram
 end
 
+function size(p::Phase1)
+    return 1 + size(p.cp)
+end
+
 function initial(p::Phase1)::Vector{Float64}
     y′ = initial(p.cp)
     y = zeros(Float64, 1+length(y′))
     y[2:end] .= y′
-    constraints!(p.cp, y′) do M,g
-        f = minimum(eigvals(Hermitian(M)))
-        if y[1] + f < 0
-            y[1] = -f + 1.0
+    constraints!(p.cp, y′) do f,g
+        if f isa Real
+            if y[1] + f < 0
+                y[1] = -f + 1.0
+            end
+        elseif f isa Matrix
+            f = minimum(eigvals(Hermitian(f)))
+            if y[1] + f < 0
+                y[1] = -f + 1.0
+            end
+        else
+            throw(ArgumentError("Expected Real or Matrix"))
         end
     end
     return y
@@ -67,17 +104,28 @@ end
 function constraints!(cb, p::Phase1, y::Vector{Float64})
     N = length(y)-1
     s = y[1]
-    constraints!(p.cp, y[2:end]) do M,D
+    function fn(M::Matrix, D)
         F = eigen(Hermitian(M))
         f = F.values[1]
         v = F.vectors[:,1]
-        g′ = zeros(Float64, length(g)+1)
+        g′ = zeros(Float64, length(D)+1)
         g′[1] = 1.
         for n in 1:N
-            g′[1+n] = v' * D[:,:,n] * v
+            g′[1+n] = real(v' * D[:,:,n] * v)
         end
         cb(s+f, g′)
     end
+
+    function fn(f::Real, d)
+        g = zeros(Float64, length(d)+1)
+        g[1] = 1.
+        for n in 1:N
+            g[1+n] = d[n]
+        end
+        cb(s+f, g)
+    end
+
+    constraints!(fn, p.cp, y[2:end])
 end
 
 function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Float64}
