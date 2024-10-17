@@ -81,6 +81,10 @@ function zero(::Type{Operator{B}})::Operator{B} where {B}
     return Operator{B}()
 end
 
+function zero(::Operator{B}) where {B}
+    zero(Operator{B})
+end
+
 function one(::Type{Operator{B}})::Operator{B} where {B}
     return Operator(one(B))
 end
@@ -151,6 +155,16 @@ function adjoint(a::Operator{B})::Operator{B} where {B}
     r = zero(Operator{B})
     for op in keys(a.terms)
         r = r+adjoint(a[op])*adjoint(op)
+    end
+    return r
+end
+
+function trim(op::Operator{B})::Operator{B} where {B}
+    r = zero(Operator{B})
+    for (b,c) in op.terms
+        if abs(c) > 1e-10
+            r.terms[b] = c
+        end
     end
     return r
 end

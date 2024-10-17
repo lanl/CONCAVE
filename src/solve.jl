@@ -15,11 +15,8 @@ struct AHOProgram <: ConvexProgram
     N::Int
     O::Matrix{ComplexF64}
     A::Vector{Matrix{ComplexF64}}
-    B::Vector{Matrix{ComplexF64}}
     C::Vector{Matrix{ComplexF64}}
     D::Vector{Matrix{ComplexF64}}
-    a::Vector{Float64}
-    b::Vector{Float64}
     c0::Vector{ComplexF64}
     sgn::Float64
 
@@ -28,7 +25,7 @@ struct AHOProgram <: ConvexProgram
         ham = CONCAVE.Hamiltonians.Hamiltonian(osc)
         ψ₀ = zero(ham.F.vectors[:,1])
         ψ₀[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
-        ψ₀ = ψ₀ / (ψ₀'ψ₀)
+        ψ₀ = ψ₀ / sqrt(ψ₀'ψ₀)
 
         # Construct algebra, Hamiltonian, et cetera
         I,x,p,an = let
@@ -37,22 +34,50 @@ struct AHOProgram <: ConvexProgram
             p = 1im * sqrt(ω/2) * (c' - c)
             I,x,p,c
         end
-        # TODO add λ back
-        H = p^2 / 2 + ω^2 * x^2 / 2
-        #H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
-        gens = [I, x, p]
-        #gens = [I, x, p, x^2]
+        H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
+        gens = [I, x, p, x^2]
         #gens = [I, x, p, x^2, p^2, x*p]
         N = length(gens)
         basis = []
         for g in gens, g′ in gens
-            p = g′' * g
-            for b in keys(p.terms)
-                if p[b] ≈ 0
+            pr = g′' * g
+            for b in keys(pr.terms)
+                if pr[b] ≈ 0
                     continue
                 end
                 if !(b in basis)
                     push!(basis, b)
+                end
+            end
+        end
+        # Linearly independent Hermitian basis
+        hbasis = []
+        for bas in basis
+            b = Operator(bas)
+            o₊ = b + b'
+            o₋ = 1im * (b - b')
+            for o in (o₊,o₋)
+                for o′ in hbasis
+                    ip = 0.
+                    nrm = 0.
+                    for b in keys(o.terms)
+                        if b in keys(o′.terms)
+                            ip += conj(o.terms[b]) * o′.terms[b]
+                        end
+                    end
+                    for b in keys(o′.terms)
+                        nrm += abs(o′.terms[b])^2
+                    end
+                    o = o - ip*o′ / nrm
+                end
+                is0 = true
+                for (b,c) in o.terms
+                    if abs(c) > 1e-10
+                        is0 = false
+                    end
+                end
+                if !is0
+                    push!(hbasis, o)
                 end
             end
         end
@@ -64,21 +89,17 @@ struct AHOProgram <: ConvexProgram
                 M[i,j] = g' * g′
             end
         end
-        # Degrees of freedom, and matrices for plucking out expectation values
-        m′,E = let
+        # Degrees of freedom.
+        m′ = let
             m = Dict{Boson, Matrix{ComplexF64}}()
-            E = Dict{Boson, Matrix{ComplexF64}}()
             for op in basis
                 mat = zeros(ComplexF64, (N,N))
                 for i in 1:length(gens), j in 1:length(gens)
                     mat[i,j] += M[i,j][op]
                 end
-                E[op] = mat' / tr(mat'mat)
-                if op != Boson(0,0)
-                    m[op] = mat
-                end
+                m[op] = mat
             end
-            m,E
+            m
         end
         # Hermitian basis for the degrees of freedom.
         m = let
@@ -97,17 +118,37 @@ struct AHOProgram <: ConvexProgram
             end
             m
         end
+        function E(op)
+            # Is this even possible?
+            for b in keys(op.terms)
+                if b ∉ basis && abs(op[b]) > 1e-10
+                    return nothing
+                end
+            end
+            F = zeros(ComplexF64, (length(basis),N^2))
+            for i in 1:N, j in 1:N
+                ij = (i-1)*N + j
+                for k in 1:length(basis)
+                    b = basis[k]
+                    if b ∈ M[i,j]
+                        F[k,ij] = M[i,j][b]
+                    end
+                end
+            end
+            v = zeros(ComplexF64, length(basis))
+            for k in 1:length(basis)
+                b = basis[k]
+                if b ∈ op
+                    v[k] = op[b]
+                end
+            end
+            u = F \ v
+            return reshape(u, (N,N))
+        end
 
         # Algebraic identities
-        A,a = let
+        A = let
             A = Matrix{ComplexF64}[]
-            b = Float64[]
-            # Identity constraint
-            mat = zeros(ComplexF64, (length(gens), length(gens)))
-            mat[1,1] = 1.
-            push!(A, mat)
-            push!(b, 1.)
-
             for i in 1:(length(gens)^2-length(m)-1)
                 # Generate random Hermitian matrix.
                 mat = randn(ComplexF64, (length(gens),length(gens)))
@@ -119,35 +160,9 @@ struct AHOProgram <: ConvexProgram
                 # Normalize
                 mat = mat / sqrt(tr(mat' * mat))
                 push!(A, mat)
-                push!(b, 0.)
             end
 
-            A,b
-        end
-
-        # Boundary conditions
-        B,b = let
-            B = Matrix{ComplexF64}[]
-            b = Float64[]
-            for bos in basis
-                ψ = ψ₀
-                for n in 1:bos.an
-                    ψ = ham.op["a"]*ψ
-                end
-                for n in 1:bos.cr
-                    ψ = ham.op["a"]'*ψ
-                end
-                val = ψ₀'ψ
-                mat = E[bos]
-                matp = conj(transpose(mat))
-                # Hermitian part
-                push!(B, (mat+matp)/2)
-                push!(b, real(ψ₀'ψ))
-                # Anti-Hermitian part
-                push!(B, -1im * (mat-matp)/2)
-                push!(b, imag(ψ₀'ψ))
-            end
-            B,b
+            A
         end
 
         # Equations of motion.
@@ -159,48 +174,40 @@ struct AHOProgram <: ConvexProgram
             C = Matrix{ComplexF64}[]
             D = Matrix{ComplexF64}[]
             c0 = ComplexF64[]
-            for b in basis
-                op = Operator(b)
+            for op in hbasis
                 dop = 1im * (H*op - op*H)
-                mat = zeros(ComplexF64, length(gens), length(gens))
-                ok = true
-                for top in keys(dop.terms)
-                    if dop[top] ≈ 0. && false # The "&& false" limits to the identity.
-                        continue
-                    end
-                    if top in keys(E)
-                        mat += dop[top] * E[top]
-                    else
-                        ok = false
-                    end
+                Eop = E(op)
+                Edop = E(dop)
+                if isnothing(Eop) || isnothing(Edop)
+                    continue
                 end
-                if ok
-                    push!(C, E[b])
-                    push!(D, mat)
-                    ψ = ψ₀
-                    O = zero(ham.H)
+                push!(C, Eop)
+                push!(D, Edop)
+                # Now compute tr(C M₀)
+                ψ = ψ₀
+                O = zero(ham.H)
+                for (b,c) in op.terms
+                    oterm = zero(ham.H)
                     for i in 1:size(O)[1]
-                        O[i,i] = 1.0 + 0.0im
+                        oterm[i,i] = 1.0 + 0.0im
                     end
                     for i in 1:b.cr
-                        O = O * ham.op["a"]'
+                        oterm = oterm * ham.op["a"]'
                     end
                     for i in 1:b.an
-                        O = O * ham.op["a"]
+                        oterm = oterm * ham.op["a"]
                     end
-                    psi = O*ψ
-                    push!(c0, ψ₀'ψ)
+                    O += c * oterm
                 end
+                ψ = O*ψ
+                push!(c0, ψ₀'ψ)
             end
             C,D,c0
         end
 
-        O = zeros(ComplexF64, (N,N))
-        for b in keys(x.terms)
-            O .+= x[b] * E[b]
-        end
+        O = E(x)
 
-        new(T,K,N,O,A,B,C,D,a,b,c0,sgn)
+        new(T,K,N,O,A,C,D,c0,sgn)
     end
 end
 
@@ -217,17 +224,6 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     r::Float64 = 0.0
     spline = QuadraticSpline(p.T, p.K)
     o::Int = 0
-    # Algebra integrals
-    for (i,ai) in enumerate(p.a)
-        spline.c[1:end] = y[1+o:3+p.K+o]
-        at!(spline, p.T)
-        r += -ai * spline.∫
-        for (j,∂) in enumerate(spline.∂∫[1:end])
-            g[o+j] += -ai*∂
-        end
-        o += 3+p.K
-    end
-    spline.c[1] = 0.
     # Boundary values
     for (k,C) in enumerate(p.C)
         spline.c[2:end] = y[1+o:2+p.K+o]
