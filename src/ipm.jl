@@ -181,6 +181,9 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
     while t < 1/ϵ
         # Center.
         v = minimize!(gd, y) do g, y
+            if any(isnan.(y)) || any(isinf.(y))
+                return Inf
+            end
             gobj, gbar = zero(g), zero(g)
             obj = objective!(gobj, prog, y)
             bar = barrier!(gbar, prog, y)

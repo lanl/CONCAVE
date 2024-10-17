@@ -37,8 +37,11 @@ struct AHOProgram <: ConvexProgram
             p = 1im * sqrt(ω/2) * (c' - c)
             I,x,p,c
         end
-        H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
-        gens = [I, x, p, x^2]
+        # TODO add λ back
+        H = p^2 / 2 + ω^2 * x^2 / 2
+        #H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
+        gens = [I, x, p]
+        #gens = [I, x, p, x^2]
         #gens = [I, x, p, x^2, p^2, x*p]
         N = length(gens)
         basis = []
@@ -147,7 +150,9 @@ struct AHOProgram <: ConvexProgram
             B,b
         end
 
-        # Equations of motion
+        # Equations of motion.
+        # TODO this can fail to find all possible EoMs, if there's a linear
+        # combination for which untracked coefficients cancel.
         C,D,c0 = let
             # C is the matrix that plucks out the thing to be differentiated. D is
             # the matrix that selects the derivative.
@@ -160,6 +165,9 @@ struct AHOProgram <: ConvexProgram
                 mat = zeros(ComplexF64, length(gens), length(gens))
                 ok = true
                 for top in keys(dop.terms)
+                    if dop[top] ≈ 0. && false # The "&& false" limits to the identity.
+                        continue
+                    end
                     if top in keys(E)
                         mat += dop[top] * E[top]
                     else
@@ -175,10 +183,10 @@ struct AHOProgram <: ConvexProgram
                         O[i,i] = 1.0 + 0.0im
                     end
                     for i in 1:b.cr
-                        O = O * an'
+                        O = O * ham.op["a"]'
                     end
                     for i in 1:b.an
-                        O = O * an
+                        O = O * ham.op["a"]
                     end
                     psi = O*ψ
                     push!(c0, ψ₀'ψ)
@@ -206,7 +214,7 @@ end
 
 function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     g .= 0.0
-    r = 0.0
+    r::Float64 = 0.0
     spline = QuadraticSpline(p.T, p.K)
     o::Int = 0
     # Algebra integrals
@@ -219,6 +227,7 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
         end
         o += 3+p.K
     end
+    spline.c[1] = 0.
     # Boundary values
     for (k,C) in enumerate(p.C)
         spline.c[2:end] = y[1+o:2+p.K+o]
@@ -249,6 +258,7 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
         end
         o += 3+p.K
     end
+    spline.c[1] = 0.
     for (i,C) in enumerate(p.C)
         D = p.D[i]
         spline.c[2:end] = y[1+o:2+p.K+o]
@@ -392,6 +402,13 @@ function demo(::Val{:RT}, verbose)
 
         if -lo > hi
             println(stderr, "WARNING: primal proved infeasible")
+        end
+
+        if true
+            dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
+            display(Λ!(dΛ, plo, ylo, plo.T))
+            display(Λ!(dΛ, plo, ylo, 0.0))
+            exit(0)
         end
 
         println("$t $ex $(-lo) $hi")
