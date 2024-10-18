@@ -17,7 +17,7 @@ struct AHOProgram <: ConvexProgram
     A::Vector{Matrix{ComplexF64}}
     C::Vector{Matrix{ComplexF64}}
     D::Vector{Matrix{ComplexF64}}
-    c0::Vector{ComplexF64}
+    c0::Vector{Float64}
     sgn::Float64
 
     function AHOProgram(ω, λ, T, K, sgn)
@@ -36,6 +36,11 @@ struct AHOProgram <: ConvexProgram
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
         gens = [I, x, p, x^2]
+        if true
+            # TODO
+            H = p^2 / 2 + ω^2 * x^2 / 2
+            gens = [I, x, p]
+        end
         #gens = [I, x, p, x^2, p^2, x*p]
         N = length(gens)
         basis = []
@@ -149,7 +154,7 @@ struct AHOProgram <: ConvexProgram
         # Algebraic identities
         A = let
             A = Matrix{ComplexF64}[]
-            for i in 1:(length(gens)^2-length(m)-1)
+            for i in 1:(length(gens)^2-length(m))
                 # Generate random Hermitian matrix.
                 mat = randn(ComplexF64, (length(gens),length(gens)))
                 mat = mat + mat'
@@ -200,12 +205,20 @@ struct AHOProgram <: ConvexProgram
                     O += c * oterm
                 end
                 ψ = O*ψ
-                push!(c0, ψ₀'ψ)
+                push!(c0, real(ψ₀'ψ))
             end
             C,D,c0
         end
 
         O = E(x)
+
+        if false
+            # Run various checks and exit.
+            for a in A
+                display(tr(a*M))
+            end
+            exit(0)
+        end
 
         new(T,K,N,O,A,C,D,c0,sgn)
     end
@@ -260,12 +273,12 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
         spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T-t)
         Λ .+= spline.f * D
-        Λ .+= spline.f′ * C
+        Λ .-= spline.f′ * C # My spline has t reversed
         for j in 2:length(spline.∂c)
             ∂ = spline.∂c[j]
             ∂′ = spline.∂c′[j]
             dΛ[:,:,j+o-1] .+= ∂ * D
-            dΛ[:,:,j+o-1] .+= ∂′ * C
+            dΛ[:,:,j+o-1] .-= ∂′ * C
         end
         o += 2+p.K
     end
@@ -400,7 +413,7 @@ function demo(::Val{:RT}, verbose)
             println(stderr, "WARNING: primal proved infeasible")
         end
 
-        if true
+        if false
             dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
             display(Λ!(dΛ, plo, ylo, plo.T))
             display(Λ!(dΛ, plo, ylo, 0.0))
