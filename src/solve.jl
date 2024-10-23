@@ -13,12 +13,12 @@ struct AHOProgram <: ConvexProgram
     T::Float64
     K::Int
     N::Int
-    O::Matrix{ComplexF64}
     A::Vector{Matrix{ComplexF64}}
     C::Vector{Matrix{ComplexF64}}
     D::Vector{Matrix{ComplexF64}}
     c0::Vector{Float64}
-    sgn::Float64
+    λT::Vector{Float64}
+    sgn::Float64 # TODO this is never used!
 
     function AHOProgram(ω, λ, T, K, sgn)
         osc = CONCAVE.Hamiltonians.Oscillator(ω, λ)
@@ -39,7 +39,9 @@ struct AHOProgram <: ConvexProgram
         if true
             # TODO
             H = p^2 / 2 + ω^2 * x^2 / 2
+            H = x^2 / 2
             gens = [I, x, p]
+            gens = [I, x]
         end
         #gens = [I, x, p, x^2, p^2, x*p]
         N = length(gens)
@@ -47,7 +49,7 @@ struct AHOProgram <: ConvexProgram
         for g in gens, g′ in gens
             pr = g′' * g
             for b in keys(pr.terms)
-                if pr[b] ≈ 0
+                if abs(pr[b]) < 1e-10
                     continue
                 end
                 if !(b in basis)
@@ -94,6 +96,17 @@ struct AHOProgram <: ConvexProgram
                 M[i,j] = g' * g′
             end
         end
+        # Initial state
+        M0 = let
+            M0 = zeros(ComplexF64, (N,N))
+            for (i,g) in enumerate(gens)
+                for (j,g′) in enumerate(gens)
+                    # TODO
+                end
+            end
+            M0
+        end
+
         # Degrees of freedom.
         m′ = let
             m = Dict{Boson, Matrix{ComplexF64}}()
@@ -123,33 +136,6 @@ struct AHOProgram <: ConvexProgram
             end
             m
         end
-        function E(op)
-            # Is this even possible?
-            for b in keys(op.terms)
-                if b ∉ basis && abs(op[b]) > 1e-10
-                    return nothing
-                end
-            end
-            F = zeros(ComplexF64, (length(basis),N^2))
-            for i in 1:N, j in 1:N
-                ij = (i-1)*N + j
-                for k in 1:length(basis)
-                    b = basis[k]
-                    if b ∈ M[i,j]
-                        F[k,ij] = M[i,j][b]
-                    end
-                end
-            end
-            v = zeros(ComplexF64, length(basis))
-            for k in 1:length(basis)
-                b = basis[k]
-                if b ∈ op
-                    v[k] = op[b]
-                end
-            end
-            u = F \ v
-            return reshape(u, (N,N))
-        end
 
         # Algebraic identities
         A = let
@@ -173,44 +159,132 @@ struct AHOProgram <: ConvexProgram
         # Equations of motion.
         # TODO this can fail to find all possible EoMs, if there's a linear
         # combination for which untracked coefficients cancel.
-        C,D,c0 = let
-            # C is the matrix that plucks out the thing to be differentiated. D is
-            # the matrix that selects the derivative.
+        C,D,c0,λT = let
             C = Matrix{ComplexF64}[]
             D = Matrix{ComplexF64}[]
-            c0 = ComplexF64[]
-            for op in hbasis
+            c0 = Float64[]
+            λT = Float64[]
+
+            function ip(o′,o)::ComplexF64
+                r::ComplexF64 = 0
+                for b in keys(o.terms) ∪ keys(o′.terms)
+                    r += conj(o′[b]) * o[b]
+                end
+                return r
+            end
+
+            function independent(o, l)::Bool
+                for o′ in l
+                    # TODO
+                end
+                for b in keys(o.terms)
+                    if abs(o[b]) > 1e-8
+                        return false
+                    end
+                end
+                return true
+            end
+
+            # Construct a list of operators and extractors.
+            ops = []
+            Es = []
+            for i in 1:N
+                for j in 1:i
+                    op = M[i,j]
+                    if independent(op, ops)
+                        E = zeros(ComplexF64, (N,N))
+                        E[i,j] = 0.5
+                        E[j,i] = 0.5
+                        push!(ops, op)
+                        push!(Es, E)
+                    end
+                end
+            end
+
+            # Derivative relations
+            for (i,op) in enumerate(ops)
                 dop = 1im * (H*op - op*H)
-                Eop = E(op)
-                Edop = E(dop)
-                if isnothing(Eop) || isnothing(Edop)
+                if independent(dop, ops)
                     continue
                 end
-                push!(C, Eop)
-                push!(D, Edop)
-                # Now compute tr(C M₀)
-                ψ = ψ₀
-                O = zero(ham.H)
-                for (b,c) in op.terms
-                    oterm = zero(ham.H)
-                    for i in 1:size(O)[1]
-                        oterm[i,i] = 1.0 + 0.0im
-                    end
-                    for i in 1:b.cr
-                        oterm = oterm * ham.op["a"]'
-                    end
-                    for i in 1:b.an
-                        oterm = oterm * ham.op["a"]
-                    end
-                    O += c * oterm
+                # Set up and solve a linear system
+                v = zeros(ComplexF64, length(ops))
+                F = zeros(ComplexF64, length(ops))
+                for k in 1:length(ops)
+                    # TODO
                 end
-                ψ = O*ψ
-                push!(c0, real(ψ₀'ψ))
+                u = F \ v
+                d = zeros(ComplexF64, (N,N))
+                for j in 1:length(ops)
+                    d += u[j] * Es[j]
+                end
+                
+                # Add derivative relation
+                push!(C, Es[i])
+                push!(D, d)
+                # Add initial value
+                push!(c0, real(tr(Es[i] * M0)))
             end
-            C,D,c0
+            # TODO initial spline coefficients
+
+            #=
+            # List all basis operators that appear, including in derivatives.
+            bbasis = []
+            for b in basis
+                op = Operator(b)
+                dop = 1im * (H*op - op*H)
+                bbasis = bbasis ∪ keys(dop.terms)
+            end
+            obasis = setdiff(bbasis, basis)
+            # Derivative matrices
+            d = zeros(ComplexF64, (length(basis),length(basis)))
+            d̃ = zeros(ComplexF64, (length(basis),length(obasis)))
+            for (i,bop) in enumerate(basis)
+                op = Operator(bop)
+                dop = 1im * (H*op - op*H)
+                for (j,b) in enumerate(basis)
+                    d[i,j] = dop[b]
+                end
+                for (j,b) in enumerate(obasis)
+                    d̃[i,j] = dop[b]
+                end
+            end
+           
+            # Construct projector
+            P = zeros(ComplexF64, (0,length(basis)))
+            for k in 1:length(basis)
+                v = randn(ComplexF64, length(basis))
+                # Orthonormalize against d̃.
+                for i in 1:length(basis)
+                    u = d̃[:,i]
+                    v -= (v'u) * conj(u) / (u'u)
+                end
+
+                # Orthonormalize against projector so far.
+                for i in 1:size(P)[1]
+                    u = P[i,:]
+                    v -= (v'u) * conj(u) / (u'u)
+                end
+
+                if real(v'v) > 1e-8
+                    # Add to C,D
+                    v /= sqrt(v'v)
+                    # TODO
+               
+                    # TODO initial value
+               
+                    # TODO late spline
+                end
+            end
+            =#
+            
+            C,D,c0,λT
         end
 
-        O = E(x)
+        # TODO
+        exit(0)
+
+        # TODO compute coefficients at the late time
 
         if false
             # Run various checks and exit.
@@ -220,7 +294,7 @@ struct AHOProgram <: ConvexProgram
             exit(0)
         end
 
-        new(T,K,N,O,A,C,D,c0,sgn)
+        return new(T,K,N,A,C,D,c0,λT,sgn)
     end
 end
 
@@ -239,6 +313,8 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     o::Int = 0
     # Boundary values
     for (k,C) in enumerate(p.C)
+        # TODO set spline at the late time
+        spline.c[1] = 0.
         spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T)
         r += spline.f * p.c0[k]
@@ -247,7 +323,9 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
         end
         o += 2+p.K
     end
-    return r
+
+    g .*= -1
+    return -r
 end
 
 function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
@@ -255,8 +333,6 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
     dΛ .= 0.
     spline = QuadraticSpline(p.T, p.K)
     Λ = zeros(ComplexF64, (p.N,p.N))
-    # The "initial" value---at the late time T
-    Λ .+= p.O
     o::Int = 0
     for (i,A) in enumerate(p.A)
         spline.c[1:end] = y[1+o:3+p.K+o]
@@ -267,9 +343,10 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
         end
         o += 3+p.K
     end
-    spline.c[1] = 0.
     for (i,C) in enumerate(p.C)
         D = p.D[i]
+        # TODO set spline at the late time
+        spline.c[1] = 0.
         spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T-t)
         Λ .+= spline.f * D
@@ -391,6 +468,19 @@ function demo(::Val{:RT}, verbose)
                 println("WARNING")
             end
         end
+        exit(0)
+    end
+
+    if false
+        plo = AHOProgram(ω, λ, T, K, 1.0)
+        y = initial(plo)
+        y .= 0
+        g = zero(y)
+        println(length(y))
+        y[1] = -1.
+        println(CONCAVE.IPM.feasible(plo, y))
+        println(CONCAVE.IPM.barrier!(g, plo, y))
+        println(CONCAVE.IPM.objective!(g, plo, y))
         exit(0)
     end
 
