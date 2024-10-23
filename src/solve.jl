@@ -227,57 +227,6 @@ struct AHOProgram <: ConvexProgram
             end
             # TODO initial spline coefficients
 
-            #=
-            # List all basis operators that appear, including in derivatives.
-            bbasis = []
-            for b in basis
-                op = Operator(b)
-                dop = 1im * (H*op - op*H)
-                bbasis = bbasis ∪ keys(dop.terms)
-            end
-            obasis = setdiff(bbasis, basis)
-            # Derivative matrices
-            d = zeros(ComplexF64, (length(basis),length(basis)))
-            d̃ = zeros(ComplexF64, (length(basis),length(obasis)))
-            for (i,bop) in enumerate(basis)
-                op = Operator(bop)
-                dop = 1im * (H*op - op*H)
-                for (j,b) in enumerate(basis)
-                    d[i,j] = dop[b]
-                end
-                for (j,b) in enumerate(obasis)
-                    d̃[i,j] = dop[b]
-                end
-            end
-           
-            # Construct projector
-            P = zeros(ComplexF64, (0,length(basis)))
-            for k in 1:length(basis)
-                v = randn(ComplexF64, length(basis))
-                # Orthonormalize against d̃.
-                for i in 1:length(basis)
-                    u = d̃[:,i]
-                    v -= (v'u) * conj(u) / (u'u)
-                end
-
-                # Orthonormalize against projector so far.
-                for i in 1:size(P)[1]
-                    u = P[i,:]
-                    v -= (v'u) * conj(u) / (u'u)
-                end
-
-                if real(v'v) > 1e-8
-                    # Add to C,D
-                    v /= sqrt(v'v)
-                    # TODO
-               
-                    # TODO initial value
-               
-                    # TODO late spline
-                end
-            end
-            =#
-            
             C,D,c0,λT
         end
 
