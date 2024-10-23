@@ -230,15 +230,39 @@ struct AHOProgram <: ConvexProgram
             C,D,c0,λT
         end
 
-        # TODO
-        exit(0)
-
-        # TODO compute coefficients at the late time
-
-        if false
-            # Run various checks and exit.
-            for a in A
-                display(tr(a*M))
+        if true
+            # Output matrices for processing in mathematica
+            function print_mathematica(mat)
+                print("{")
+                for i in 1:N
+                    print("{")
+                    for j in 1:N
+                        print(real(mat[i,j]),"+",imag(mat[i,j]),"I")
+                        if j < N
+                            print(",")
+                        end
+                    end
+                    print("}")
+                    if i < N
+                        print(",")
+                    end
+                end
+                print("}")
+            end
+            for (k,a) in enumerate(A)
+                print("A[$k] = ")
+                print_mathematica(a)
+                println()
+            end
+            for (k,c) in enumerate(C)
+                print("C[$k] = ")
+                print_mathematica(c)
+                println()
+            end
+            for (k,d) in enumerate(D)
+                print("D[$k] = ")
+                print_mathematica(d)
+                println()
             end
             exit(0)
         end
