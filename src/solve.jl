@@ -96,12 +96,22 @@ struct AHOProgram <: ConvexProgram
                 M[i,j] = g' * g′
             end
         end
-        # Initial state
+        # Expectation values in the initial state
         M0 = let
             M0 = zeros(ComplexF64, (N,N))
             for (i,g) in enumerate(gens)
                 for (j,g′) in enumerate(gens)
-                    # TODO
+                    op = g' * g′
+                    for (b,c) in op.terms
+                        ψ = ψ₀
+                        for k in 1:b.cr
+                            ψ = ham.op["a"]' * ψ
+                        end
+                        for k in 1:b.an
+                            ψ = ham.op["a"] * ψ
+                        end
+                        M0[i,j] += c*real(ψ₀'ψ)
+                    end
                 end
             end
             M0
