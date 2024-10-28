@@ -230,6 +230,13 @@ struct AHOProgram <: ConvexProgram
                 end
             end
 
+            if false
+                for i in 1:length(xops)
+                    display(tr(Es[i] * M) - xops[i])
+                end
+                exit(0)
+            end
+
             # Construct a list of "untracked" operators.
             for op in xops
                 dop = 1im * (H * op - op * H)
@@ -266,6 +273,18 @@ struct AHOProgram <: ConvexProgram
                 d̃[i,:] = real(u[Nx+1:Nx+Ny])
             end
 
+            # Orthonormalize the columns of d̃.
+            d̃s = []
+            for i in 1:Ny
+                v = d̃[:,i]
+                for u in d̃s
+                    v = v - (v⋅u)*u
+                end
+                v /= sqrt(v⋅v)
+                push!(d̃s,v)
+            end
+
+            # Create an orthogonal set of degrees of freedom.
             vs = []
             for i in 1:Nx
                 v = randn(Float64, Nx)
@@ -276,7 +295,7 @@ struct AHOProgram <: ConvexProgram
 
                 # Orthogonalize against columns of d̃.
                 for j in 1:Ny
-                    u = d̃[:,j]
+                    u = d̃s[j]
                     v = v - (v⋅u)*u
                 end
 
@@ -294,22 +313,41 @@ struct AHOProgram <: ConvexProgram
                 for (k,xop) in enumerate(xops)
                     op += v[k] * xop
                 end
-                dop = 1im * (H*op - op*H)
-                # Set up and solve a linear system
-                v = zeros(ComplexF64, length(basis))
-                F = zeros(ComplexF64, (length(basis),Nx))
-                for (k,b) in enumerate(basis)
-                    v[k] = dop[b]
-                    for (k′,op′) in enumerate(xops)
-                        F[k,k′] = op′[b]
+                # Find Cmat
+                Cmat = let
+                    v = zeros(ComplexF64, length(basis))
+                    F = zeros(ComplexF64, (length(basis),Nx))
+                    for (k,b) in enumerate(basis)
+                        v[k] = op[b]
+                        for (k′,op′) in enumerate(xops)
+                            F[k,k′] = op′[b]
+                        end
                     end
+                    u = F \ v
+                    mat = zeros(ComplexF64, (N,N))
+                    for j in 1:Nx
+                        mat += u[j] * Es[j]
+                    end
+                    mat
                 end
-                u = F \ v
-                Dmat = zeros(ComplexF64, (N,N))
-                Cmat = zeros(ComplexF64, (N,N))
-                for j in 1:Nx
-                    Dmat += u[j] * Es[j]
-                    Cmat += v[j] * Es[j]
+
+                # Find Dmat
+                dop = 1im * (H*op - op*H)
+                Dmat = let
+                    v = zeros(ComplexF64, length(basis))
+                    F = zeros(ComplexF64, (length(basis),Nx))
+                    for (k,b) in enumerate(basis)
+                        v[k] = dop[b]
+                        for (k′,op′) in enumerate(xops)
+                            F[k,k′] = op′[b]
+                        end
+                    end
+                    u = F \ v
+                    mat = zeros(ComplexF64, (N,N))
+                    for j in 1:Nx
+                        mat += u[j] * Es[j]
+                    end
+                    mat
                 end
 
                 # Add derivative relation
@@ -317,7 +355,7 @@ struct AHOProgram <: ConvexProgram
                 push!(C, Cmat)
                 push!(D, Dmat)
                 # Add initial value
-                push!(c0, real(tr(Es[i] * M0)))
+                push!(c0, real(tr(Cmat * M0)))
             end
 
             # Spline coefficients
@@ -341,15 +379,43 @@ struct AHOProgram <: ConvexProgram
             C,D,c0,λT
         end
 
+        if false
+            # Check algebra
+            for (k,a) in enumerate(A)
+                op = tr(a*M)
+                for (b,coef) in op.terms
+                    if abs(coef) > 1e-10
+                        println("Algebra ERROR: $k")
+                    end
+                end
+            end
+
+            for (k,(c,d)) in enumerate(zip(C,D))
+                op = tr(c*M)
+                dop = tr(d*M)
+                dop′ = 1im * (H*op - op*H)
+                println()
+                println(k)
+                for b in keys(dop.terms) ∪ keys(dop′.terms)
+                    diff = abs(dop[b] - dop′[b])
+                    if diff > 1e-10
+                        println(dop[b], "      ", dop′[b])
+                    end
+                end
+            end
+
+            exit(0)
+        end
+
         if true
             # Output matrices for processing in mathematica
             function print_mathematica(x::Float64)
                 expon = 0
-                while x > 10
+                while abs(x) > 10
                     x /= 10
                     expon += 1
                 end
-                while x < 1 && abs(expon) < 10
+                while abs(x) < 1 && abs(expon) < 10
                     expon -= 1
                     x *= 10
                 end
