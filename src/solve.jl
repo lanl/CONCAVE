@@ -1,5 +1,6 @@
 using ArgParse
-using LinearAlgebra: tr
+using LinearAlgebra: ⋅,tr
+using Printf
 
 using CONCAVE
 using CONCAVE.Splines
@@ -165,14 +166,7 @@ struct AHOProgram <: ConvexProgram
         end
 
         # Equations of motion.
-        # TODO this can fail to find all possible EoMs, if there's a linear
-        # combination for which untracked coefficients cancel.
         C,D,c0,λT = let
-            Cop = []
-            C = Matrix{ComplexF64}[]
-            D = Matrix{ComplexF64}[]
-            c0 = Float64[]
-
             function ip(o′,o)::ComplexF64
                 r::ComplexF64 = 0
                 for b in keys(o.terms) ∪ keys(o′.terms)
@@ -206,55 +200,128 @@ struct AHOProgram <: ConvexProgram
                 return false
             end
 
-            # Construct a list of operators and extractors.
-            ops = []
+            C = Matrix{ComplexF64}[]
+            D = Matrix{ComplexF64}[]
+            c0 = Float64[]
+            Cop = []
+            xops = []
+            yops = []
             Es = []
+
+            # Construct a list of operators and extractors.
             for i in 1:N
                 for j in 1:i
-                    op = M[i,j]
-                    if independent(op, ops)
+                    op₊ = 0.5 * (M[i,j] + M[j,i])
+                    op₋ = 0.5im * (M[i,j] - M[j,i])
+                    if independent(op₊, xops)
                         E = zeros(ComplexF64, (N,N))
                         E[i,j] += 0.5
                         E[j,i] += 0.5
-                        push!(ops, op)
+                        push!(xops, op₊)
+                        push!(Es, E)
+                    end
+                    if independent(op₋, xops)
+                        E = zeros(ComplexF64, (N,N))
+                        E[i,j] -= 0.5im
+                        E[j,i] += 0.5im
+                        push!(xops, op₋)
                         push!(Es, E)
                     end
                 end
             end
 
-            # Derivative relations
-            for (i,op) in enumerate(ops)
-                dop = 1im * (H*op - op*H)
-                if independent(dop, ops)
-                    continue
+            # Construct a list of "untracked" operators.
+            for op in xops
+                dop = 1im * (H * op - op * H)
+                if independent(dop, xops)
+                    if independent(dop, yops)
+                        push!(yops, dop)
+                    end
                 end
-                # Set up and solve a linear system
+            end
+
+            Nx = length(xops)
+            Ny = length(yops)
+
+            # Construct derivative matrices
+            d = zeros(Float64, (Nx,Nx))
+            d̃ = zeros(Float64, (Nx,Ny))
+            for (i,op) in enumerate(xops)
+                dop = 1im * (H * op - op * H)
                 v = zeros(ComplexF64, length(basis))
-                F = zeros(ComplexF64, (length(basis),length(ops)))
+                F = zeros(ComplexF64, (length(basis),Nx+Ny))
                 for (k,b) in enumerate(basis)
                     v[k] = dop[b]
-                    for (k′,op′) in enumerate(ops)
+                    for (k′,op′) in enumerate(xops)
+                        F[k,k′] = op′[b]
+                    end
+                    for (k′,op′) in enumerate(yops)
+                        F[k,Nx+k′] = op′[b]
+                    end
+                end
+                u = F \ v
+                @assert maximum(imag.(u)) < 1e-8
+
+                d[i,:] = real(u[1:Nx])
+                d̃[i,:] = real(u[Nx+1:Nx+Ny])
+            end
+
+            vs = []
+            for i in 1:Nx
+                v = randn(Float64, Nx)
+                # Orthogonalize against previous vectors.
+                for u in vs
+                    v = v - (v⋅u)*u
+                end
+
+                # Orthogonalize against columns of d̃.
+                for j in 1:Ny
+                    u = d̃[:,j]
+                    v = v - (v⋅u)*u
+                end
+
+                # Normalize
+                if abs(v⋅v) ≤ 1e-8
+                    break
+                end
+                v /= sqrt(v⋅v)
+
+                push!(vs, v)
+            end
+
+            for (i,v) in enumerate(vs)
+                op = zero(Operator{Boson})
+                for (k,xop) in enumerate(xops)
+                    op += v[k] * xop
+                end
+                dop = 1im * (H*op - op*H)
+                # Set up and solve a linear system
+                v = zeros(ComplexF64, length(basis))
+                F = zeros(ComplexF64, (length(basis),Nx))
+                for (k,b) in enumerate(basis)
+                    v[k] = dop[b]
+                    for (k′,op′) in enumerate(xops)
                         F[k,k′] = op′[b]
                     end
                 end
                 u = F \ v
-                d = zeros(ComplexF64, (N,N))
-                opcheck = 0*op
-                for j in 1:length(ops)
-                    d += u[j] * Es[j]
-                    opcheck += u[j] * ops[j]
+                Dmat = zeros(ComplexF64, (N,N))
+                Cmat = zeros(ComplexF64, (N,N))
+                for j in 1:Nx
+                    Dmat += u[j] * Es[j]
+                    Cmat += v[j] * Es[j]
                 end
-                
+
                 # Add derivative relation
                 push!(Cop, op)
-                push!(C, Es[i])
-                push!(D, d)
+                push!(C, Cmat)
+                push!(D, Dmat)
                 # Add initial value
                 push!(c0, real(tr(Es[i] * M0)))
             end
 
             # Spline coefficients
-            O = sgn * x  # TODO extra (-1)?
+            O = -sgn * x
             λT::Vector{Float64} = let
                 v = zeros(ComplexF64, length(basis))
                 F = zeros(ComplexF64, (length(basis),length(C)))
@@ -274,21 +341,44 @@ struct AHOProgram <: ConvexProgram
             C,D,c0,λT
         end
 
-        if false
+        if true
             # Output matrices for processing in mathematica
-            function print_mathematica(mat)
+            function print_mathematica(x::Float64)
+                expon = 0
+                while x > 10
+                    x /= 10
+                    expon += 1
+                end
+                while x < 1 && abs(expon) < 10
+                    expon -= 1
+                    x *= 10
+                end
+                @printf "%f*10^(%d)" x expon
+            end
+            function print_mathematica(x::ComplexF64)
+                print_mathematica(real(x))
+                if imag(x) < 0
+                    print("-")
+                    print_mathematica(-imag(x))
+                else
+                    print("+")
+                    print_mathematica(imag(x))
+                end
+                print("I")
+            end
+            function print_mathematica(mat::Matrix)
                 print("{")
                 for i in 1:N
                     print("{")
                     for j in 1:N
-                        print(real(mat[i,j]),"+",imag(mat[i,j]),"I")
+                        print_mathematica(mat[i,j])
                         if j < N
-                            print(",")
+                            print(" , ")
                         end
                     end
                     print("}")
                     if i < N
-                        print(",")
+                        print(" , ")
                     end
                 end
                 print("}")
@@ -374,6 +464,9 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
         end
         o += 2+p.K
     end
+    if rand() < 1e-4 # TODO
+        display(Λ)
+    end
     return Λ
 end
 
@@ -390,7 +483,7 @@ function demo(::Val{:RT}, verbose)
     # Parameters.
     ω = 1.
     λ = 1.0
-    T = 5.0
+    T = 2.0
     K = 0
 
     # For diagonalizing.
