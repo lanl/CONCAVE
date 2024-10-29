@@ -216,7 +216,7 @@ struct AHOProgram <: ConvexProgram
 
             A
         end
-        if true # TODO
+        if false
             A = []
             #mat = ComplexF64[0 1im 0; -1im 0 0; 0 0 0]
             #push!(A, mat)
@@ -664,7 +664,8 @@ end
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
-    for t in 0:0.01:p.T
+    #for t in 0:0.01:p.T
+    for t in LinRange(0,p.T,11)
         Λ = Λ!(dΛ, p, y, t)
         cb(Λ, dΛ)
     end
@@ -782,8 +783,8 @@ function demo(::Val{:RT}, verbose)
         exit(0)
     end
 
+    ψ = U*ψ
     for t in dt:dt:T
-        ψ = U*ψ
         ex = real(ψ' * ham.op["x"] * ψ)
 
         plo = AHOProgram(ω, λ, t, K, 1.0)
