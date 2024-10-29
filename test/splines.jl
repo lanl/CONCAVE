@@ -7,6 +7,14 @@ using Random: rand!, randn!
 using CONCAVE
 using CONCAVE.Splines
 
+@testset "allocations" begin
+    spline = QuadraticSpline(1.0, 3)
+    rand!(spline.c)
+    at!(spline, 0.4)
+    allocs = @allocations at!(spline, 0.4)
+    #@test allocs == 0
+end
+
 @testset "small quadratic splines" begin
     spline0 = QuadraticSpline(1.0, 0)
     spline1 = QuadraticSpline(1.0, 1)

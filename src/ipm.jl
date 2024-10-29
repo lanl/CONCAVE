@@ -173,7 +173,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
     N = length(y)
     g = zero(y)
 
-    μ = 1.1
+    μ = 1.2
     ϵ = 1e-10
     t₀ = 1.0e-3
 

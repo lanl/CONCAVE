@@ -1,6 +1,8 @@
 using ArgParse
 using LinearAlgebra: ⋅,tr
 using Printf
+using Profile
+using REPL
 
 using CONCAVE
 using CONCAVE.Splines
@@ -622,29 +624,29 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
     # dΛ has shape (N,N,size(p))
     dΛ .= 0.
     spline = QuadraticSpline(p.T, p.K)
-    Λ = zeros(ComplexF64, (p.N,p.N))
+    Λ::Matrix{ComplexF64} = zeros(ComplexF64, (p.N,p.N))
     o::Int = 0
-    for (i,A) in enumerate(p.A)
-        spline.c[1:end] = y[1+o:3+p.K+o]
+    @views for (i,A) in enumerate(p.A)
+        spline.c[1:end] .= y[1+o:3+p.K+o]
         at!(spline, p.T-t)
-        Λ .+= spline.f * A
+        Λ .+= spline.f .* A
         for (j,∂) in enumerate(spline.∂c[1:end])
-            dΛ[:,:,j+o] .+= A * ∂
+            dΛ[:,:,j+o] .+= A .* ∂
         end
         o += 3+p.K
     end
-    for (i,C) in enumerate(p.C)
+    @views for (i,C) in enumerate(p.C)
         D = p.D[i]
         spline.c[1] = p.λT[i]
-        spline.c[2:end] = y[1+o:2+p.K+o]
+        spline.c[2:end] .= y[1+o:2+p.K+o]
         at!(spline, p.T-t)
-        Λ .+= spline.f * D
-        Λ .-= spline.f′ * C # My spline has t reversed
+        Λ .+= spline.f .* D
+        Λ .-= spline.f′ .* C # My spline has t reversed
         for j in 2:length(spline.∂c)
             ∂ = spline.∂c[j]
             ∂′ = spline.∂c′[j]
-            dΛ[:,:,j+o-1] .+= ∂ * D
-            dΛ[:,:,j+o-1] .-= ∂′ * C
+            dΛ[:,:,j+o-1] .+= ∂ .* D
+            dΛ[:,:,j+o-1] .-= ∂′ .* C
         end
         o += 2+p.K
     end
@@ -904,12 +906,44 @@ function main()
     args = let
         s = ArgParseSettings()
         @add_arg_table s begin
+            "--profile"
+                action = :store_true
             "--demo"
                 arg_type = Symbol
             "-v","--verbose"
                 action = :store_true
         end
         parse_args(s)
+    end
+
+    if false
+        ω = 1.0
+        λ = 1.0
+        T = 1.0
+        K = 0
+        p = AHOProgram(ω, λ, T, K, 1.0)
+        dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
+        y = zeros(Float64, size(p))
+        Λ!(dΛ, p, y, 0.5)
+        println(@allocations Λ!(dΛ, p, y, 0.5))
+        return
+    end
+
+    if args["profile"]
+        ω = 1.0
+        λ = 1.0
+        T = 1.0
+        K = 0
+        p = AHOProgram(ω, λ, T, K, 1.0)
+        @profile CONCAVE.IPM.solve(p)
+        open("prof-flat", "w") do f
+            Profile.print(f, format=:flat, sortedby=:count)
+        end
+        if false
+            term = REPL.Terminals.TTYTerminal("dumb", stdin, stdout, stderr)
+            repl = REPL.LineEditREPL(term, true)
+            REPL.run_repl(repl)
+        end
     end
 
     if !isnothing(args["demo"])

@@ -47,8 +47,8 @@ function at!(s::QuadraticSpline, t::Float64)
     s.∂c′ .= 0.
     s.∂∫ .= 0.
 
-    o = 0
-    function coef()
+    o::Int = 0
+    function coef()::Float64
         o += 1
         return s.c[o]
     end
@@ -57,16 +57,16 @@ function at!(s::QuadraticSpline, t::Float64)
     s.∂c[o] = 1.0
     s.f′ = coef()
     s.∂c′[o] = 1.0
-    f′′ = coef()
-    t′ = 0
+    f′′::Float64 = coef()
+    t′::Float64 = 0
     function advance(dt::Float64)
         s.∫ += f′′ * dt^3 / 6 + s.f′ * dt^2 / 2 + s.f * dt
-        s.∂∫ .+= dt * s.∂c
-        s.∂∫ .+= (dt^2 / 2) * s.∂c′
+        s.∂∫ .+= dt .* s.∂c
+        s.∂∫ .+= (dt^2 / 2) .* s.∂c′
         s.∂∫[o] += dt^3 / 6
 
-        s.f += dt * s.f′ + f′′ * dt^2 / 2
-        s.∂c .+= dt * s.∂c′
+        s.f += dt * s.f′ + f′′ * (dt^2 / 2)
+        s.∂c .+= dt .* s.∂c′
         s.∂c[o] += dt^2 / 2
 
         s.f′ += dt * f′′
