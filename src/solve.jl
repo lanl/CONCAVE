@@ -37,7 +37,7 @@ struct AHOProgram <: ConvexProgram
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
         gens = [I, x, p, x^2]
-        if true
+        if false
             # TODO
             H = p^2 / 2 + ω^2 * x^2 / 2
             gens = [I, x, p]
@@ -382,7 +382,7 @@ struct AHOProgram <: ConvexProgram
             C,D,c0,λT
         end
 
-        if true # TODO this is actually okay to be `false`, at least for QHO
+        if false # TODO this is actually okay to be `false`, at least for QHO
             # Manually select derivative constraints
             ops = [Operator(Boson(0,0)), x, p^2 + x^2]
             ops = [Operator(Boson(0,0)), x, p^2 + x^2]
@@ -783,6 +783,7 @@ function demo(::Val{:RT}, verbose)
         if verbose
             println("Algebraic constraints: ", length(plo.A))
             println("Derivatives: ", length(plo.C))
+            println("Parameters: ", size(plo))
         end
 
         if false
@@ -791,7 +792,7 @@ function demo(::Val{:RT}, verbose)
             exit(0)
         end
        
-        if true
+        if false
             lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
             println("A feasible sample: ", ylo)
             for t in [0, 0.5, 1.0]
@@ -815,8 +816,8 @@ function demo(::Val{:RT}, verbose)
             exit(0)
         end
 
-        lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
-        hi, yhi = CONCAVE.IPM.solve(phi; verbose=true)
+        lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
+        hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
 
         if -lo > hi
             println(stderr, "WARNING: primal proved infeasible")
