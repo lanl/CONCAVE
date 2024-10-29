@@ -37,7 +37,7 @@ struct AHOProgram <: ConvexProgram
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
         gens = [I, x, p, x^2]
-        if false
+        if true
             # TODO
             H = p^2 / 2 + ω^2 * x^2 / 2
             gens = [I, x, p]
@@ -164,42 +164,43 @@ struct AHOProgram <: ConvexProgram
 
             A
         end
+        A = [] # TODO
+
+        function ip(o′,o)::ComplexF64
+            r::ComplexF64 = 0
+            for b in keys(o.terms) ∪ keys(o′.terms)
+                r += conj(o′[b]) * o[b]
+            end
+            return r
+        end
+
+        function independent(o, l)::Bool
+            # First orthogonormalize l
+            l′ = []
+            for o′ in l
+                for o′′ in l′
+                    coef = ip(o′, o′′)
+                    o′ = o′ - conj(coef) * o′′
+                end
+                if real(ip(o′,o′)) > 1e-8
+                    o′ /= sqrt(ip(o′,o′))
+                    push!(l′, o′)
+                end
+            end
+            for o′ in l′
+                coef = ip(o, o′)
+                o = o - conj(coef) * o′
+            end
+            for b in keys(o.terms)
+                if abs(o[b]) > 1e-8
+                    return true
+                end
+            end
+            return false
+        end
 
         # Equations of motion.
         C,D,c0,λT = let
-            function ip(o′,o)::ComplexF64
-                r::ComplexF64 = 0
-                for b in keys(o.terms) ∪ keys(o′.terms)
-                    r += conj(o′[b]) * o[b]
-                end
-                return r
-            end
-
-            function independent(o, l)::Bool
-                # First orthogonormalize l
-                l′ = []
-                for o′ in l
-                    for o′′ in l′
-                        coef = ip(o′, o′′)
-                        o′ = o′ - conj(coef) * o′′
-                    end
-                    if real(ip(o′,o′)) > 1e-8
-                        o′ /= sqrt(ip(o′,o′))
-                        push!(l′, o′)
-                    end
-                end
-                for o′ in l′
-                    coef = ip(o, o′)
-                    o = o - conj(coef) * o′
-                end
-                for b in keys(o.terms)
-                    if abs(o[b]) > 1e-8
-                        return true
-                    end
-                end
-                return false
-            end
-
             C = Matrix{ComplexF64}[]
             D = Matrix{ComplexF64}[]
             c0 = Float64[]
@@ -240,10 +241,8 @@ struct AHOProgram <: ConvexProgram
             # Construct a list of "untracked" operators.
             for op in xops
                 dop = 1im * (H * op - op * H)
-                if independent(dop, xops)
-                    if independent(dop, yops)
-                        push!(yops, dop)
-                    end
+                if independent(dop, xops ∪ yops)
+                    push!(yops, dop)
                 end
             end
 
@@ -359,8 +358,8 @@ struct AHOProgram <: ConvexProgram
             end
 
             # Spline coefficients
-            O = -sgn * x
-            λT::Vector{Float64} = let
+            O = sgn * x
+            λT = let
                 v = zeros(ComplexF64, length(basis))
                 F = zeros(ComplexF64, (length(basis),length(C)))
                 for (k,b) in enumerate(basis)
@@ -379,6 +378,116 @@ struct AHOProgram <: ConvexProgram
             C,D,c0,λT
         end
 
+        if true # TODO this is actually okay to be `false`, at least for QHO
+            # Manually select derivative constraints
+            ops = [Operator(Boson(0,0)), x, p^2 + x^2]
+            ops = [Operator(Boson(0,0)), x, p^2 + x^2]
+
+            xops = []
+            Es = []
+            for i in 1:N
+                for j in 1:i
+                    op₊ = 0.5 * (M[i,j] + M[j,i])
+                    op₋ = 0.5im * (M[i,j] - M[j,i])
+                    if independent(op₊, xops)
+                        E = zeros(ComplexF64, (N,N))
+                        E[i,j] += 0.5
+                        E[j,i] += 0.5
+                        push!(xops, op₊)
+                        push!(Es, E)
+                    end
+                    if independent(op₋, xops)
+                        E = zeros(ComplexF64, (N,N))
+                        E[i,j] -= 0.5im
+                        E[j,i] += 0.5im
+                        push!(xops, op₋)
+                        push!(Es, E)
+                    end
+                end
+            end
+            Nx = length(xops)
+
+            Cop = []
+            C = []
+            D = []
+            c0 = []
+            for op in ops
+                # Find Cmat
+                Cmat = let
+                    v = zeros(ComplexF64, length(basis))
+                    F = zeros(ComplexF64, (length(basis),Nx))
+                    for (k,b) in enumerate(basis)
+                        v[k] = op[b]
+                        for (k′,op′) in enumerate(xops)
+                            F[k,k′] = op′[b]
+                        end
+                    end
+                    u = F \ v
+                    mat = zeros(ComplexF64, (N,N))
+                    for j in 1:Nx
+                        mat += u[j] * Es[j]
+                    end
+                    mat
+                end
+
+                # Find Dmat
+                dop = 1im * (H*op - op*H)
+                Dmat = let
+                    v = zeros(ComplexF64, length(basis))
+                    F = zeros(ComplexF64, (length(basis),Nx))
+                    for (k,b) in enumerate(basis)
+                        v[k] = dop[b]
+                        for (k′,op′) in enumerate(xops)
+                            F[k,k′] = op′[b]
+                        end
+                    end
+                    u = F \ v
+                    mat = zeros(ComplexF64, (N,N))
+                    for j in 1:Nx
+                        mat += u[j] * Es[j]
+                    end
+                    mat
+                end
+
+                # Add derivative relation
+                push!(Cop, op)
+                push!(C, Cmat)
+                push!(D, Dmat)
+                # Add initial value
+                push!(c0, real(tr(Cmat * M0)))
+            end
+
+            λT = []
+            # Spline coefficients
+            O = sgn * x
+            λT::Vector{Float64} = let
+                v = zeros(ComplexF64, length(basis))
+                F = zeros(ComplexF64, (length(basis),length(C)))
+                for (k,b) in enumerate(basis)
+                    v[k] = O[b]
+                    for (k′,op) in enumerate(Cop)
+                        F[k,k′] = op[b]
+                    end
+                end
+                u = F \ v
+                ur = real.(u)
+                ui = imag.(u)
+                @assert maximum(abs.(ui)) < 1e-8
+                ur
+            end
+        end
+
+        if false
+            # Check late boundary
+            Λ = zeros(ComplexF64, (N,N))
+            for (k,c) in enumerate(C)
+                Λ += λT[k] * c
+            end
+            display(tr(Λ*M))
+            display(x)
+            exit(0)
+        end
+
         if false
             # Check algebra
             for (k,a) in enumerate(A)
@@ -394,11 +503,11 @@ struct AHOProgram <: ConvexProgram
                 op = tr(c*M)
                 dop = tr(d*M)
                 dop′ = 1im * (H*op - op*H)
-                println()
-                println(k)
                 for b in keys(dop.terms) ∪ keys(dop′.terms)
                     diff = abs(dop[b] - dop′[b])
                     if diff > 1e-10
+                        println()
+                        println(k)
                         println(dop[b], "      ", dop′[b])
                     end
                 end
@@ -407,7 +516,7 @@ struct AHOProgram <: ConvexProgram
             exit(0)
         end
 
-        if true
+        if false
             # Output matrices for processing in mathematica
             function print_mathematica(x::Float64)
                 expon = 0
@@ -450,17 +559,17 @@ struct AHOProgram <: ConvexProgram
                 print("}")
             end
             for (k,a) in enumerate(A)
-                print("A[$k] = ")
+                print("a[$k] = ")
                 print_mathematica(a)
                 println()
             end
             for (k,c) in enumerate(C)
-                print("C[$k] = ")
+                print("c[$k] = ")
                 print_mathematica(c)
                 println()
             end
             for (k,d) in enumerate(D)
-                print("D[$k] = ")
+                print("d[$k] = ")
                 print_mathematica(d)
                 println()
             end
@@ -496,8 +605,9 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
         o += 2+p.K
     end
 
+    r *= -1
     g .*= -1
-    return -r
+    return r
 end
 
 function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
@@ -530,9 +640,6 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
         end
         o += 2+p.K
     end
-    if rand() < 1e-4 # TODO
-        display(Λ)
-    end
     return Λ
 end
 
@@ -549,7 +656,7 @@ function demo(::Val{:RT}, verbose)
     # Parameters.
     ω = 1.
     λ = 1.0
-    T = 2.0
+    T = 1.0
     K = 0
 
     # For diagonalizing.
@@ -670,6 +777,31 @@ function demo(::Val{:RT}, verbose)
             println("Derivatives: ", length(plo.C))
         end
 
+        if false
+            dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
+            display(Λ!(dΛ, plo, zeros(Float64, size(plo)), T))
+            exit(0)
+        end
+       
+        if false
+            lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
+            println("A feasible sample: ", ylo)
+            exit(0)
+        end
+
+        if false
+            ylo = [-100., 0., 0., 0., -100., 0] 
+            g = zero(ylo)
+            println("Feasible: ", CONCAVE.IPM.feasible(plo, ylo))
+            println(objective!(g, plo, ylo))
+            println()
+            for t in [0, 0.5, 1.0]
+                dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
+                display(Λ!(dΛ, plo, ylo, t))
+            end
+            exit(0)
+        end
+
         lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
         hi, yhi = CONCAVE.IPM.solve(phi; verbose=true)
 
@@ -746,6 +878,9 @@ function demo(::Val{:Thermo}, verbose)
 end
 
 function demo(::Val{:SpinThermo}, verbose)
+end
+
+function demo(::Val{:Hubbard}, verbose)
 end
 
 function demo(::Val{:Coulomb}, verbose)
