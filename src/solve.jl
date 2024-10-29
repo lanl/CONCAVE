@@ -12,6 +12,55 @@ import CONCAVE.Programs: initial, constraints!, objective!
 
 demo(s::Symbol; verbose=false) = demo(Val(s), verbose)
 
+# Output matrices for processing in mathematica
+function print_mathematica(x::Float64)
+    expon = 0
+    while abs(x) > 10
+        x /= 10
+        expon += 1
+    end
+    while abs(x) < 1 && abs(expon) < 10
+        expon -= 1
+        x *= 10
+    end
+    @printf "%f*10^(%d)" x expon
+end
+function print_mathematica(x::ComplexF64)
+    print_mathematica(real(x))
+    if imag(x) < 0
+        print("-")
+        print_mathematica(-imag(x))
+    else
+        print("+")
+        print_mathematica(imag(x))
+    end
+    print("I")
+end
+function print_mathematica(mat::Matrix)
+    N = size(mat)[1]
+    print("{")
+    for i in 1:N
+        print("{")
+        for j in 1:N
+            print_mathematica(mat[i,j])
+            if j < N
+                print(" , ")
+            end
+        end
+        print("}")
+        if i < N
+            print(" , ")
+        end
+    end
+    print("}")
+end
+
+function aho_state_initialize!(ψ)
+    ψ .= 0.0
+    ψ[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
+    ψ .= ψ / sqrt(ψ'ψ)
+end
+
 struct AHOProgram <: ConvexProgram
     T::Float64
     K::Int
@@ -27,8 +76,7 @@ struct AHOProgram <: ConvexProgram
         osc = CONCAVE.Hamiltonians.Oscillator(ω, λ)
         ham = CONCAVE.Hamiltonians.Hamiltonian(osc)
         ψ₀ = zero(ham.F.vectors[:,1])
-        ψ₀[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
-        ψ₀ = ψ₀ / sqrt(ψ₀'ψ₀)
+        aho_state_initialize!(ψ₀)
 
         # Construct algebra, Hamiltonian, et cetera
         I,x,p,an = let
@@ -39,7 +87,7 @@ struct AHOProgram <: ConvexProgram
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
         gens = [I, x, p, x^2]
-        if false
+        if true
             # TODO
             H = p^2 / 2 + ω^2 * x^2 / 2
             gens = [I, x, p]
@@ -111,12 +159,14 @@ struct AHOProgram <: ConvexProgram
                         for k in 1:b.an
                             ψ = ham.op["a"] * ψ
                         end
-                        M0[i,j] += c*real(ψ₀'ψ)
+                        M0[i,j] += c*ψ₀'ψ
                     end
                 end
             end
             M0
         end
+        #print_mathematica(M0)
+        #exit(0)
 
         # Degrees of freedom.
         m′ = let
@@ -166,10 +216,10 @@ struct AHOProgram <: ConvexProgram
 
             A
         end
-        if false
+        if true # TODO
             A = []
-            mat = ComplexF64[0 1im 0; -1im 0 0; 0 0 0]
-            push!(A, mat)
+            #mat = ComplexF64[0 1im 0; -1im 0 0; 0 0 0]
+            #push!(A, mat)
         end
 
         function ip(o′,o)::ComplexF64
@@ -384,9 +434,8 @@ struct AHOProgram <: ConvexProgram
             C,D,c0,λT
         end
 
-        if false # TODO this is actually okay to be `false`, at least for QHO
+        if false
             # Manually select derivative constraints
-            ops = [Operator(Boson(0,0)), x, p^2 + x^2]
             ops = [Operator(Boson(0,0)), x, p^2 + x^2]
 
             xops = []
@@ -523,47 +572,6 @@ struct AHOProgram <: ConvexProgram
         end
 
         if false
-            # Output matrices for processing in mathematica
-            function print_mathematica(x::Float64)
-                expon = 0
-                while abs(x) > 10
-                    x /= 10
-                    expon += 1
-                end
-                while abs(x) < 1 && abs(expon) < 10
-                    expon -= 1
-                    x *= 10
-                end
-                @printf "%f*10^(%d)" x expon
-            end
-            function print_mathematica(x::ComplexF64)
-                print_mathematica(real(x))
-                if imag(x) < 0
-                    print("-")
-                    print_mathematica(-imag(x))
-                else
-                    print("+")
-                    print_mathematica(imag(x))
-                end
-                print("I")
-            end
-            function print_mathematica(mat::Matrix)
-                print("{")
-                for i in 1:N
-                    print("{")
-                    for j in 1:N
-                        print_mathematica(mat[i,j])
-                        if j < N
-                            print(" , ")
-                        end
-                    end
-                    print("}")
-                    if i < N
-                        print(" , ")
-                    end
-                end
-                print("}")
-            end
             for (k,a) in enumerate(A)
                 print("a[$k] = ")
                 print_mathematica(a)
@@ -675,8 +683,7 @@ function demo(::Val{:RT}, verbose)
     ham = CONCAVE.Hamiltonians.Hamiltonian(p)
     Ω = ham.F.vectors[:,1]
     ψ = zero(Ω)
-    #ψ[1:5] .= [0., -1.0im, 1., 1.0im, 0.0]
-    ψ[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
+    aho_state_initialize!(ψ)
     ψ₀ = copy(ψ)
     U = CONCAVE.Hamiltonians.evolution(ham, dt)
 
@@ -779,8 +786,8 @@ function demo(::Val{:RT}, verbose)
         ψ = U*ψ
         ex = real(ψ' * ham.op["x"] * ψ)
 
-        plo = AHOProgram(ω, λ, T, K, 1.0)
-        phi = AHOProgram(ω, λ, T, K, -1.0)
+        plo = AHOProgram(ω, λ, t, K, 1.0)
+        phi = AHOProgram(ω, λ, t, K, -1.0)
 
         if verbose
             println("Algebraic constraints: ", length(plo.A))
@@ -800,7 +807,9 @@ function demo(::Val{:RT}, verbose)
             for t in [0, 0.5, 1.0]
                 println()
                 dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
-                display(Λ!(dΛ, plo, ylo, t))
+                #display(Λ!(dΛ, plo, ylo, t))
+                print_mathematica(Λ!(dΛ, plo, ylo, t))
+                println()
             end
             exit(0)
         end
@@ -813,7 +822,9 @@ function demo(::Val{:RT}, verbose)
             println()
             for t in [0, 0.5, 1.0]
                 dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
-                display(Λ!(dΛ, plo, ylo, t))
+                #display(Λ!(dΛ, plo, ylo, t))
+                print_mathematica(Λ!(dΛ, plo, ylo, t))
+                println()
             end
             exit(0)
         end
