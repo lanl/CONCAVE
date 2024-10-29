@@ -164,7 +164,11 @@ struct AHOProgram <: ConvexProgram
 
             A
         end
-        A = [] # TODO
+        if false
+            A = []
+            mat = ComplexF64[0 1im 0; -1im 0 0; 0 0 0]
+            push!(A, mat)
+        end
 
         function ip(o′,o)::ComplexF64
             r::ComplexF64 = 0
@@ -593,6 +597,10 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     r::Float64 = 0.0
     spline = QuadraticSpline(p.T, p.K)
     o::Int = 0
+    # Run up the offset
+    for (i,A) in enumerate(p.A)
+        o += 3+p.K
+    end
     # Boundary values
     for (k,C) in enumerate(p.C)
         spline.c[1] = p.λT[k]
@@ -783,9 +791,14 @@ function demo(::Val{:RT}, verbose)
             exit(0)
         end
        
-        if false
+        if true
             lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
             println("A feasible sample: ", ylo)
+            for t in [0, 0.5, 1.0]
+                println()
+                dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
+                display(Λ!(dΛ, plo, ylo, t))
+            end
             exit(0)
         end
 
