@@ -178,9 +178,11 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
     t₀ = 1.0e-3
 
     t = t₀
+    H = zeros(Float64, (N,N))
+    H += I
     while t < 1/ϵ
         # Center.
-        v = minimize!(gd, y) do g, y
+        v = minimize!(gd, y; H0=H) do g, y
             if any(isnan.(y)) || any(isinf.(y))
                 return Inf
             end

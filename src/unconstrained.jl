@@ -101,7 +101,7 @@ end
 struct BFGS
 end
 
-function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
+function (bfgs::BFGS)(f!, y::Vector{Float64}; H0=nothing)::Float64
     N = length(y)
     ∇::Vector{Float64} = zero(y)
     ∇′::Vector{Float64} = zero(y)
@@ -115,11 +115,15 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
 
     # Initial guess of inverse Hessian (just guess the identity).
     H = zeros(Float64, (N,N))
-    for n in 1:N
-        H[n,n] = 1.0
+    if isnothing(H0)
+        for n in 1:N
+            H[n,n] = 1.0
+        end
+    else
+        H .= H0
     end
 
-    for step in 1:10000
+    for step in 1:30000
         # Get initial value and gradient.
         r₀ = f!(∇, y)
         if isnan(r₀)
@@ -180,14 +184,19 @@ function (bfgs::BFGS)(f!, y::Vector{Float64})::Float64
             println("  ", y)
         end
     end
+
+    if !isnothing(H0)
+        H0 .= H
+    end
+
     return f!(∇, y)[1]
 end
 
 struct LBFGS
 end
 
-function minimize!(f!, alg, y::Vector{Float64})::Float64
-    return alg()(f!, y)
+function minimize!(f!, alg, y::Vector{Float64}; kwargs...)::Float64
+    return alg()(f!, y; kwargs...)
 end
 
 end
