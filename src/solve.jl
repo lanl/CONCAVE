@@ -214,7 +214,7 @@ struct AHOProgram <: ConvexProgram
 
             A
         end
-        if true # TODO
+        if false # TODO
             A = []
             #mat = ComplexF64[0 1im 0; -1im 0 0; 0 0 0]
             #push!(A, mat)
