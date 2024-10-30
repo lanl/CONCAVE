@@ -138,7 +138,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64}; H0=nothing)::Float64
             for n in 1:N
                 y′[n] = y[n] - α * g[n]
             end
-            return f!(∇′, y′)
+            return f!(nothing, y′)
         end
         r = at!(α)
         while r > r₀ && α > αmin

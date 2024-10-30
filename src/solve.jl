@@ -601,7 +601,9 @@ function initial(p::AHOProgram)::Vector{Float64}
 end
 
 function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
-    g .= 0.0
+    if !isnothing(g)
+        g .= 0.0
+    end
     r::Float64 = 0.0
     spline = QuadraticSpline(p.T, p.K)
     o::Int = 0
@@ -615,20 +617,26 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
         spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T)
         r += spline.f * p.c0[k]
-        for (j,∂) in enumerate(spline.∂c[2:end])
-            g[o+j] += p.c0[k] * ∂
+        if !isnothing(g)
+            for (j,∂) in enumerate(spline.∂c[2:end])
+                g[o+j] += p.c0[k] * ∂
+            end
         end
         o += 2+p.K
     end
 
     r *= -1
-    g .*= -1
+    if !isnothing(g)
+        g .*= -1
+    end
     return r
 end
 
-function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
-    # dΛ has shape (N,N,size(p))
-    dΛ .= 0.
+function Λ!(dΛ, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
+    if !isnothing(dΛ)
+        # dΛ has shape (N,N,size(p))
+        dΛ .= 0.
+    end
     spline = QuadraticSpline(p.T, p.K)
     Λ::Matrix{ComplexF64} = zeros(ComplexF64, (p.N,p.N))
     o::Int = 0
@@ -636,8 +644,10 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
         spline.c[1:end] .= y[1+o:3+p.K+o]
         at!(spline, p.T-t)
         Λ .+= spline.f .* A
-        for (j,∂) in enumerate(spline.∂c[1:end])
-            dΛ[:,:,j+o] .+= A .* ∂
+        if !isnothing(dΛ)
+            for (j,∂) in enumerate(spline.∂c[1:end])
+                dΛ[:,:,j+o] .+= A .* ∂
+            end
         end
         o += 3+p.K
     end
@@ -648,11 +658,13 @@ function Λ!(dΛ::Array{ComplexF64,3}, p::AHOProgram, y::Vector{Float64}, t::Flo
         at!(spline, p.T-t)
         Λ .+= spline.f .* D
         Λ .-= spline.f′ .* C # My spline has t reversed
-        for j in 2:length(spline.∂c)
-            ∂ = spline.∂c[j]
-            ∂′ = spline.∂c′[j]
-            dΛ[:,:,j+o-1] .+= ∂ .* D
-            dΛ[:,:,j+o-1] .-= ∂′ .* C
+        if !isnothing(dΛ)
+            for j in 2:length(spline.∂c)
+                ∂ = spline.∂c[j]
+                ∂′ = spline.∂c′[j]
+                dΛ[:,:,j+o-1] .+= ∂ .* D
+                dΛ[:,:,j+o-1] .-= ∂′ .* C
+            end
         end
         o += 2+p.K
     end

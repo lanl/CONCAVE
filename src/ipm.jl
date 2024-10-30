@@ -30,9 +30,11 @@ function feasible(p, y)::Bool
 end
 
 function barrier!(g, p, y::Vector{Float64})::Float64
-    N = length(g)
+    N = length(y)
     r::Float64 = 0.
-    g .= 0.
+    if !isnothing(g)
+        g .= 0.
+    end
 
     function cb(M::Matrix, D)
         F = eigen(Hermitian(M))
@@ -44,8 +46,10 @@ function barrier!(g, p, y::Vector{Float64})::Float64
             f = F.values[1]
             r += -log(f)
             v = F.vectors[:,1]
-            for n in 1:N
-                g[n] -= real(v' * D[:,:,n] * v)/f
+            if !isnothing(g)
+                for n in 1:N
+                    g[n] -= real(v' * D[:,:,n] * v)/f
+                end
             end
         end
     end
@@ -56,8 +60,10 @@ function barrier!(g, p, y::Vector{Float64})::Float64
         end
         if r < Inf
             r += -log(f)
-            for n in 1:N
-                g[n] -= d[n]/f
+            if !isnothing(g)
+                for n in 1:N
+                    g[n] -= d[n]/f
+                end
             end
         end
     end
@@ -139,7 +145,9 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
 
     minimize!(BFGS, y) do g, y
         r::Float64 = 0.
-        g .= 0.0
+        if !isnothing(g)
+            g .= 0.0
+        end
         constraints!(prog, y) do M,D
             if any(isinf.(M)) || any(isnan.(M))
                 r = Inf
@@ -150,8 +158,10 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
             v = F.vectors[:,1]
             if f ≤ 0
                 r -= f
-                for n in 1:N
-                    g[n] -= real(v' * D[:,:,n] * v)
+                if !isnothing(g)
+                    for n in 1:N
+                        g[n] -= real(v' * D[:,:,n] * v)
+                    end
                 end
             end
         end
@@ -186,12 +196,18 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
             if any(isnan.(y)) || any(isinf.(y))
                 return Inf
             end
-            gobj, gbar = zero(g), zero(g)
+            if isnothing(g)
+                gobj, gbar = nothing, nothing
+            else
+                gobj, gbar = zero(g), zero(g)
+            end
             obj = objective!(gobj, prog, y)
             bar = barrier!(gbar, prog, y)
             r = obj + bar/t
-            for n in 1:N
-                g[n] = gobj[n] + gbar[n]/t
+            if !isnothing(g)
+                for n in 1:N
+                    g[n] = gobj[n] + gbar[n]/t
+                end
             end
             return r
         end
