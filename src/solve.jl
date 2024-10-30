@@ -87,8 +87,8 @@ struct AHOProgram <: ConvexProgram
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
         gens = [I, x, p, x^2]
-        if true
-            # TODO
+        if false
+            # TODO remember to change the interaction in the exact result!
             H = p^2 / 2 + ω^2 * x^2 / 2
             gens = [I, x, p]
         end
@@ -165,8 +165,6 @@ struct AHOProgram <: ConvexProgram
             end
             M0
         end
-        #print_mathematica(M0)
-        #exit(0)
 
         # Degrees of freedom.
         m′ = let
@@ -216,7 +214,7 @@ struct AHOProgram <: ConvexProgram
 
             A
         end
-        if false
+        if true # TODO
             A = []
             #mat = ComplexF64[0 1im 0; -1im 0 0; 0 0 0]
             #push!(A, mat)
