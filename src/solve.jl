@@ -108,17 +108,15 @@ struct AHOProgram <: ConvexProgram
             o₋ = 1im * (b - b')
             for o in (o₊,o₋)
                 for o′ in hbasis
-                    ip = 0.
-                    nrm = 0.
-                    for b in keys(o.terms)
-                        if b in keys(o′.terms)
-                            ip += conj(o.terms[b]) * o′.terms[b]
-                        end
+                    iprod::ComplexF64 = 0.
+                    nrm::Float64 = 0.
+                    for b in keys(o.terms) ∪ keys(o′.terms)
+                        iprod += conj(o[b]) * o′[b]
                     end
                     for b in keys(o′.terms)
                         nrm += abs(o′.terms[b])^2
                     end
-                    o = o - ip*o′ / nrm
+                    o = o - iprod*o′ / nrm
                 end
                 is0 = true
                 for (b,c) in o.terms
@@ -182,7 +180,7 @@ struct AHOProgram <: ConvexProgram
                     for a in m
                         mat -= a * tr(mat * a') / tr(a * a')
                     end
-                    if (sum(abs.(mat))) ≉ 0
+                    if sum(abs.(mat)) ≥ 1e-10
                         push!(m, mat)
                     end
                 end
@@ -519,8 +517,8 @@ end
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
-    #for t in LinRange(0,p.T,11)
-    for t in LinRange(0,p.T,11)
+    #for t in LinRange(0,p.T,1 + 10*(1+p.K)) # TODO
+    for t in [0,p.T]
         Λ = Λ!(dΛ, p, y, t)
         cb(Λ, dΛ)
     end
@@ -531,6 +529,7 @@ function demo(::Val{:RT}, verbose)
     ω = 1.
     λ = 1.0
     T = 5.0
+    T = 1.0 # TODO
 
     # For diagonalizing.
     dt = 1e-1
@@ -635,7 +634,8 @@ function demo(::Val{:RT}, verbose)
         ψ = U*ψ
     end
 
-    for (N,K) in [(4,0), (6,0), (4,2), (6,2)]
+    #for (N,K) in [(4,0), (6,0), (4,2), (6,2)]
+    for (N,K) in [(5,0)]
         p0 = AHOProgram(ω, λ, 0.0, K, N, 1.0)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)

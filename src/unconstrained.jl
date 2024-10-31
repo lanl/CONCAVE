@@ -110,8 +110,8 @@ function (bfgs::BFGS)(f!, y::Vector{Float64}; H0=nothing)::Float64
     y′::Vector{Float64} = zero(y)
 
     α = 1.
-    αmin = 1e-10
-    δmin = 1e-10
+    αmin = 1e-12
+    δmin = 1e-12
 
     # Initial guess of inverse Hessian (just guess the identity).
     H = zeros(Float64, (N,N))
