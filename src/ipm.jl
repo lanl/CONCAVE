@@ -42,14 +42,27 @@ function barrier!(g, p, y::Vector{Float64})::Float64
             r = Inf
         end
         if r < Inf
-            # TODO use log of M
-            # We just use the minimum eigenvalue.
-            f = F.values[1]
-            r += -log(f)
-            v = F.vectors[:,1]
-            if !isnothing(g)
-                for n in 1:N
-                    g[n] -= real(v' * D[:,:,n] * v)/f
+            if true
+                # We use the trace of the logarithm.
+                r += -sum(log.(F.values))
+                if !isnothing(g)
+                    for k in 1:length(F.values)
+                        f = F.values[k]
+                        v = F.vectors[:,k]
+                        for n in 1:N
+                            g[n] -= real(v' * D[:,:,n] * v)/f
+                        end
+                    end
+                end
+            else
+                # We just use the minimum eigenvalue.
+                f = F.values[1]
+                r += -log(f)
+                v = F.vectors[:,1]
+                if !isnothing(g)
+                    for n in 1:N
+                        g[n] -= real(v' * D[:,:,n] * v)/f
+                    end
                 end
             end
         end

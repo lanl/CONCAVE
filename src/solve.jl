@@ -684,7 +684,7 @@ function demo(::Val{:RT}, verbose)
     # Parameters.
     ω = 1.
     λ = 1.0
-    T = 5.0
+    T = 0.4
     K = 0
 
     # For diagonalizing.
