@@ -72,7 +72,7 @@ struct AHOProgram <: ConvexProgram
     λT::Vector{Float64}
     sgn::Float64
 
-    function AHOProgram(ω, λ, T, K, sgn)
+    function AHOProgram(ω, λ, T, K, N, sgn)
         osc = CONCAVE.Hamiltonians.Oscillator(ω, λ)
         ham = CONCAVE.Hamiltonians.Hamiltonian(osc)
         ψ₀ = zero(ham.F.vectors[:,1])
@@ -86,14 +86,8 @@ struct AHOProgram <: ConvexProgram
             I,x,p,c
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
-        gens = [I, x, p, x^2]
-        if false
-            # TODO remember to change the interaction in the exact result!
-            H = p^2 / 2 + ω^2 * x^2 / 2
-            gens = [I, x, p]
-        end
-        #gens = [I, x, p, x^2, p^2, x*p]
-        N = length(gens)
+        gens = [I, x, p, x^2, p^2, x*p, x^3, x^4]
+        gens = gens[1:N]
         basis = []
         for g in gens, g′ in gens
             pr = g′' * g
@@ -165,10 +159,6 @@ struct AHOProgram <: ConvexProgram
             end
             M0
         end
-        if false
-            display(M0)
-            exit(0)
-        end
 
         # Degrees of freedom.
         m′ = let
@@ -217,11 +207,6 @@ struct AHOProgram <: ConvexProgram
             end
 
             A
-        end
-        if false
-            A = []
-            #mat = ComplexF64[0 1im 0; -1im 0 0; 0 0 0]
-            #push!(A, mat)
         end
 
         function ip(o′,o)::ComplexF64
@@ -287,13 +272,6 @@ struct AHOProgram <: ConvexProgram
                         push!(Es, E)
                     end
                 end
-            end
-
-            if false
-                for i in 1:length(xops)
-                    display(tr(Es[i] * M) - xops[i])
-                end
-                exit(0)
             end
 
             # Construct a list of "untracked" operators.
@@ -437,144 +415,6 @@ struct AHOProgram <: ConvexProgram
         end
 
         if false
-            # Manually select derivative constraints
-            ops = [Operator(Boson(0,0)), x, p^2 + x^2]
-            #ops = [Operator(Boson(0,0)), p^2 + x^2]
-
-            xops = []
-            Es = []
-            for i in 1:N
-                for j in 1:i
-                    op₊ = 0.5 * (M[i,j] + M[j,i])
-                    op₋ = 0.5im * (M[i,j] - M[j,i])
-                    if independent(op₊, xops)
-                        E = zeros(ComplexF64, (N,N))
-                        E[i,j] += 0.5
-                        E[j,i] += 0.5
-                        push!(xops, op₊)
-                        push!(Es, E)
-                    end
-                    if independent(op₋, xops)
-                        E = zeros(ComplexF64, (N,N))
-                        E[i,j] -= 0.5im
-                        E[j,i] += 0.5im
-                        push!(xops, op₋)
-                        push!(Es, E)
-                    end
-                end
-            end
-            Nx = length(xops)
-
-            Cop = []
-            C = []
-            D = []
-            c0 = []
-            for op in ops
-                # Find Cmat
-                Cmat = let
-                    v = zeros(ComplexF64, length(basis))
-                    F = zeros(ComplexF64, (length(basis),Nx))
-                    for (k,b) in enumerate(basis)
-                        v[k] = op[b]
-                        for (k′,op′) in enumerate(xops)
-                            F[k,k′] = op′[b]
-                        end
-                    end
-                    u = F \ v
-                    mat = zeros(ComplexF64, (N,N))
-                    for j in 1:Nx
-                        mat += u[j] * Es[j]
-                    end
-                    mat
-                end
-
-                # Find Dmat
-                dop = 1im * (H*op - op*H)
-                Dmat = let
-                    v = zeros(ComplexF64, length(basis))
-                    F = zeros(ComplexF64, (length(basis),Nx))
-                    for (k,b) in enumerate(basis)
-                        v[k] = dop[b]
-                        for (k′,op′) in enumerate(xops)
-                            F[k,k′] = op′[b]
-                        end
-                    end
-                    u = F \ v
-                    mat = zeros(ComplexF64, (N,N))
-                    for j in 1:Nx
-                        mat += u[j] * Es[j]
-                    end
-                    mat
-                end
-
-                # Add derivative relation
-                push!(Cop, op)
-                push!(C, Cmat)
-                push!(D, Dmat)
-                # Add initial value
-                push!(c0, real(tr(Cmat * M0)))
-            end
-
-            λT = []
-            # Spline coefficients
-            O = sgn * x
-            λT::Vector{Float64} = let
-                v = zeros(ComplexF64, length(basis))
-                F = zeros(ComplexF64, (length(basis),length(C)))
-                for (k,b) in enumerate(basis)
-                    v[k] = O[b]
-                    for (k′,op) in enumerate(Cop)
-                        F[k,k′] = op[b]
-                    end
-                end
-                u = F \ v
-                ur = real.(u)
-                ui = imag.(u)
-                @assert maximum(abs.(ui)) < 1e-8
-                ur
-            end
-        end
-
-        if false
-            # Check late boundary
-            Λ = zeros(ComplexF64, (N,N))
-            for (k,c) in enumerate(C)
-                Λ += λT[k] * c
-            end
-            display(tr(Λ*M))
-            display(x)
-            exit(0)
-        end
-
-        if false
-            # Check algebra
-            for (k,a) in enumerate(A)
-                op = tr(a*M)
-                for (b,coef) in op.terms
-                    if abs(coef) > 1e-10
-                        println("Algebra ERROR: $k")
-                    end
-                end
-            end
-
-            for (k,(c,d)) in enumerate(zip(C,D))
-                op = tr(c*M)
-                dop = tr(d*M)
-                dop′ = 1im * (H*op - op*H)
-                for b in keys(dop.terms) ∪ keys(dop′.terms)
-                    diff = abs(dop[b] - dop′[b])
-                    if diff > 1e-10
-                        println()
-                        println(k)
-                        println(dop[b], "      ", dop′[b])
-                    end
-                end
-            end
-
-            exit(0)
-        end
-
-        if false
             for (k,a) in enumerate(A)
                 print("a[$k] = ")
                 print_mathematica(a)
@@ -679,6 +519,7 @@ end
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
+    #for t in LinRange(0,p.T,11)
     for t in LinRange(0,p.T,11)
         Λ = Λ!(dΛ, p, y, t)
         cb(Λ, dΛ)
@@ -689,28 +530,19 @@ function demo(::Val{:RT}, verbose)
     # Parameters.
     ω = 1.
     λ = 1.0
-    T = 1.0
-    K = 0
+    T = 5.0
 
     # For diagonalizing.
     dt = 1e-1
     p = CONCAVE.Hamiltonians.Oscillator(ω, λ)
     ham = CONCAVE.Hamiltonians.Hamiltonian(p)
     Ω = ham.F.vectors[:,1]
-    ψ = zero(Ω)
-    aho_state_initialize!(ψ)
-    if false
-        println(ψ'ψ)
-        println(ψ'ham.op["x"]'ψ)
-        println(ψ' * (ham.op["x"]^2) * ψ)
-        exit(0)
-    end
-    ψ₀ = copy(ψ)
-    U = CONCAVE.Hamiltonians.evolution(ham, dt)
 
     if false
-        plo = AHOProgram(ω, λ, T, K, 1.0)
-        phi = AHOProgram(ω, λ, T, K, -1.0)
+        L = 6
+        K = 2
+        plo = AHOProgram(ω, λ, T, 2, 6, 1.0)
+        phi = AHOProgram(ω, λ, T, 2, 6, -1.0)
         p1 = CONCAVE.IPM.Phase1(phi)
         z = initial(p1)
         @assert CONCAVE.IPM.feasible(p1, z)
@@ -739,9 +571,10 @@ function demo(::Val{:RT}, verbose)
 
     if false
         # Check phase-2 derivatives (barrier).
-        plo = AHOProgram(ω, λ, T, K, 1.0)
+        N,K = 6,2
+        plo = AHOProgram(ω, λ, T, K, N, 1.0)
         y = CONCAVE.IPM.feasible_initial(plo)
-        ϵ = 1e-4
+        ϵ = 1e-5
         g = zero(y)
         g′ = zero(y)
         bar = CONCAVE.IPM.barrier!(g, plo, y)
@@ -765,8 +598,9 @@ function demo(::Val{:RT}, verbose)
     end
 
     if false
+        N,K = 6,2
         # Check phase-2 derivatives (objective).
-        plo = AHOProgram(ω, λ, T, K, 1.0)
+        plo = AHOProgram(ω, λ, T, K, N, 1.0)
         y = CONCAVE.IPM.feasible_initial(plo)
         ϵ = 1e-4
         g = zero(y)
@@ -790,91 +624,36 @@ function demo(::Val{:RT}, verbose)
         exit(0)
     end
 
-    if false
-        plo = AHOProgram(ω, λ, T, K, 1.0)
-        y = initial(plo)
-        y .= 0
-        g = zero(y)
-        println(length(y))
-        y[1] = -1.
-        println(CONCAVE.IPM.feasible(plo, y))
-        println(CONCAVE.IPM.barrier!(g, plo, y))
-        println(CONCAVE.IPM.objective!(g, plo, y))
-        exit(0)
-    end
-
+    ψ = zero(Ω)
+    aho_state_initialize!(ψ)
+    ψ₀ = copy(ψ)
+    U = CONCAVE.Hamiltonians.evolution(ham, dt)
     ψ = U*ψ
     for t in dt:dt:T
         ex = real(ψ' * ham.op["x"] * ψ)
-        if false
-            println("$t $ex")
-            ψ = U * ψ
-            continue
-        end
+        println("$t -1 -1 $ex $ex")
+        ψ = U*ψ
+    end
 
-        plo = AHOProgram(ω, λ, t, K, 1.0)
-        phi = AHOProgram(ω, λ, t, K, -1.0)
+    for (N,K) in [(4,0), (6,0), (4,2), (6,2)]
+        p0 = AHOProgram(ω, λ, 0.0, K, N, 1.0)
+        println(stderr, "N = $N; K = $K")
+        println(stderr, "Algebraic constraints: ", length(p0.A))
+        println(stderr, "Derivatives: ", length(p0.C))
+        println(stderr, "Parameters: ", size(p0))
+        for t in dt:dt:T
+            plo = AHOProgram(ω, λ, t, K, N, 1.0)
+            phi = AHOProgram(ω, λ, t, K, N, -1.0)
 
-        if verbose
-            println("Algebraic constraints: ", length(plo.A))
-            println("Derivatives: ", length(plo.C))
-            println("Parameters: ", size(plo))
-        end
+            lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
+            hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
 
-        if false
-            dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
-            display(Λ!(dΛ, plo, zeros(Float64, size(plo)), T))
-            exit(0)
-        end
-       
-        if false
-            plo = AHOProgram(ω, λ, 1.0, K, 1.0)
-            lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
-            println("A feasible sample: ", ylo)
-            for t in [0, 0.5, 1.0]
-                println()
-                println("t = $t")
-                dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
-                Λ = Λ!(dΛ, plo, ylo, t)
-                display(Λ)
-                display(eigvals(Λ))
-                #print_mathematica(Λ!(dΛ, plo, ylo, t))
-                println()
+            if -lo > hi
+                println(stderr, "WARNING: primal proved infeasible")
             end
-            exit(0)
-        end
 
-        if false
-            ylo = [-100., 0., 0., 0., -100., 0] 
-            g = zero(ylo)
-            println("Feasible: ", CONCAVE.IPM.feasible(plo, ylo))
-            println(objective!(g, plo, ylo))
-            println()
-            for t in [0, 0.5, 1.0]
-                dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
-                #display(Λ!(dΛ, plo, ylo, t))
-                print_mathematica(Λ!(dΛ, plo, ylo, t))
-                println()
-            end
-            exit(0)
-        end
-
-        lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
-        hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
-
-        if -lo > hi
-            println(stderr, "WARNING: primal proved infeasible")
-        end
-
-        if false
-            dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
-            display(Λ!(dΛ, plo, ylo, plo.T))
-            display(Λ!(dΛ, plo, ylo, 0.0))
-            exit(0)
-        end
-
-        println("$t $ex $(-lo) $hi")
-        ψ = U * ψ
+            println("$t $N $K $(-lo) $hi")
+         end
     end
 end
 
@@ -957,25 +736,12 @@ function main()
         parse_args(s)
     end
 
-    if false
-        ω = 1.0
-        λ = 1.0
-        T = 1.0
-        K = 0
-        p = AHOProgram(ω, λ, T, K, 1.0)
-        dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
-        y = zeros(Float64, size(p))
-        Λ!(dΛ, p, y, 0.5)
-        println(@allocations Λ!(dΛ, p, y, 0.5))
-        return
-    end
-
     if args["profile"]
         ω = 1.0
         λ = 1.0
         T = 1.0
         K = 1
-        p = AHOProgram(ω, λ, T, K, 1.0)
+        p = AHOProgram(ω, λ, T, K, 6, 1.0)
         @profile CONCAVE.IPM.solve(p)
         open("prof-flat", "w") do f
             Profile.print(f, format=:flat, sortedby=:count)
