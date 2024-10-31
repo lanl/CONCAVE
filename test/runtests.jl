@@ -6,4 +6,5 @@ include("algebra.jl")
 include("ipm.jl")
 include("programs.jl")
 include("splines.jl")
+include("unconstrained.jl")
 

@@ -123,7 +123,9 @@ function (bfgs::BFGS)(f!, y::Vector{Float64}; H0=nothing)::Float64
         H .= H0
     end
 
+    nsteps = 0
     for step in 1:30000
+        nsteps += 1
         # Get initial value and gradient.
         r₀ = f!(∇, y)
         if isnan(r₀)
@@ -189,7 +191,9 @@ function (bfgs::BFGS)(f!, y::Vector{Float64}; H0=nothing)::Float64
         H0 .= H
     end
 
-    return f!(∇, y)[1]
+    #println("BFGS took $nsteps steps")
+
+    return f!(nothing, y)[1]
 end
 
 struct LBFGS

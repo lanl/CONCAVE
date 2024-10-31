@@ -42,6 +42,7 @@ function barrier!(g, p, y::Vector{Float64})::Float64
             r = Inf
         end
         if r < Inf
+            # TODO use log of M
             # We just use the minimum eigenvalue.
             f = F.values[1]
             r += -log(f)

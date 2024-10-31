@@ -674,7 +674,6 @@ end
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
-    #for t in 0:0.01:p.T
     for t in LinRange(0,p.T,11)
         Λ = Λ!(dΛ, p, y, t)
         cb(Λ, dΛ)
@@ -685,7 +684,7 @@ function demo(::Val{:RT}, verbose)
     # Parameters.
     ω = 1.
     λ = 1.0
-    T = 1.0
+    T = 5.0
     K = 0
 
     # For diagonalizing.
@@ -796,6 +795,11 @@ function demo(::Val{:RT}, verbose)
     ψ = U*ψ
     for t in dt:dt:T
         ex = real(ψ' * ham.op["x"] * ψ)
+        if false
+            println("$t $ex")
+            ψ = U * ψ
+            continue
+        end
 
         plo = AHOProgram(ω, λ, t, K, 1.0)
         phi = AHOProgram(ω, λ, t, K, -1.0)
@@ -955,16 +959,14 @@ function main()
         ω = 1.0
         λ = 1.0
         T = 1.0
-        K = 0
+        K = 1
         p = AHOProgram(ω, λ, T, K, 1.0)
         @profile CONCAVE.IPM.solve(p)
         open("prof-flat", "w") do f
             Profile.print(f, format=:flat, sortedby=:count)
         end
-        if false
-            term = REPL.Terminals.TTYTerminal("dumb", stdin, stdout, stderr)
-            repl = REPL.LineEditREPL(term, true)
-            REPL.run_repl(repl)
+        open("prof-tree", "w") do f
+            Profile.print(f, noisefloor=2.0)
         end
     end
 
