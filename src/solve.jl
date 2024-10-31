@@ -637,10 +637,10 @@ function demo(::Val{:RT}, verbose)
 
     for (N,K) in [(4,0), (6,0), (4,2), (6,2)]
         p0 = AHOProgram(ω, λ, 0.0, K, N, 1.0)
-        println(stderr, "N = $N; K = $K")
-        println(stderr, "Algebraic constraints: ", length(p0.A))
-        println(stderr, "Derivatives: ", length(p0.C))
-        println(stderr, "Parameters: ", size(p0))
+        printstyled(stderr, "N = $N; K = $K\n", bold=true)
+        printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
+        printstyled(stderr, "Derivatives: $(length(p0.C))\n", bold=true)
+        printstyled(stderr, "Parameters: $(size(p0))\n", bold=true)
         for t in dt:dt:T
             plo = AHOProgram(ω, λ, t, K, N, 1.0)
             phi = AHOProgram(ω, λ, t, K, N, -1.0)
