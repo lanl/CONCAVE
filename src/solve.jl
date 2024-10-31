@@ -1,5 +1,5 @@
 using ArgParse
-using LinearAlgebra: ⋅,tr
+using LinearAlgebra
 using Printf
 using Profile
 using REPL
@@ -153,17 +153,21 @@ struct AHOProgram <: ConvexProgram
                     op = g' * g′
                     for (b,c) in op.terms
                         ψ = ψ₀
-                        for k in 1:b.cr
-                            ψ = ham.op["a"]' * ψ
-                        end
                         for k in 1:b.an
                             ψ = ham.op["a"] * ψ
+                        end
+                        for k in 1:b.cr
+                            ψ = ham.op["a"]' * ψ
                         end
                         M0[i,j] += c*ψ₀'ψ
                     end
                 end
             end
             M0
+        end
+        if false
+            display(M0)
+            exit(0)
         end
 
         # Degrees of freedom.
@@ -214,7 +218,7 @@ struct AHOProgram <: ConvexProgram
 
             A
         end
-        if false # TODO
+        if false
             A = []
             #mat = ComplexF64[0 1im 0; -1im 0 0; 0 0 0]
             #push!(A, mat)
@@ -435,6 +439,7 @@ struct AHOProgram <: ConvexProgram
         if false
             # Manually select derivative constraints
             ops = [Operator(Boson(0,0)), x, p^2 + x^2]
+            #ops = [Operator(Boson(0,0)), p^2 + x^2]
 
             xops = []
             Es = []
@@ -684,7 +689,7 @@ function demo(::Val{:RT}, verbose)
     # Parameters.
     ω = 1.
     λ = 1.0
-    T = 0.4
+    T = 1.0
     K = 0
 
     # For diagonalizing.
@@ -694,6 +699,12 @@ function demo(::Val{:RT}, verbose)
     Ω = ham.F.vectors[:,1]
     ψ = zero(Ω)
     aho_state_initialize!(ψ)
+    if false
+        println(ψ'ψ)
+        println(ψ'ham.op["x"]'ψ)
+        println(ψ' * (ham.op["x"]^2) * ψ)
+        exit(0)
+    end
     ψ₀ = copy(ψ)
     U = CONCAVE.Hamiltonians.evolution(ham, dt)
 
@@ -817,13 +828,17 @@ function demo(::Val{:RT}, verbose)
         end
        
         if false
+            plo = AHOProgram(ω, λ, 1.0, K, 1.0)
             lo, ylo = CONCAVE.IPM.solve(plo; verbose=true)
             println("A feasible sample: ", ylo)
             for t in [0, 0.5, 1.0]
                 println()
+                println("t = $t")
                 dΛ = zeros(ComplexF64, (plo.N, plo.N, size(plo)))
-                #display(Λ!(dΛ, plo, ylo, t))
-                print_mathematica(Λ!(dΛ, plo, ylo, t))
+                Λ = Λ!(dΛ, plo, ylo, t)
+                display(Λ)
+                display(eigvals(Λ))
+                #print_mathematica(Λ!(dΛ, plo, ylo, t))
                 println()
             end
             exit(0)

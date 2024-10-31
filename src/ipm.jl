@@ -183,7 +183,7 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
     end
 
     if !feasible(prog, y)
-        error("No feasible point found.")
+        error("No (strictly) feasible point found.")
     end
 
     return y
@@ -191,13 +191,13 @@ end
 
 function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothing)::Tuple{Float64, Vector{Float64}}
     if !feasible(prog, y)
-        error("Initial point was not feasible")
+        error("Initial point was not (strictly) feasible")
     end
 
     N = length(y)
     g = zero(y)
 
-    μ = 1.2
+    μ = 2
     ϵ = 1e-10
     t₀ = 1.0e-3
 
