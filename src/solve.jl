@@ -91,10 +91,11 @@ struct AHOProgram <: ConvexProgram
         basis = []
         for g in gens, g′ in gens
             pr = g′' * g
-            for b in keys(pr.terms)
-                if abs(pr[b]) < 1e-10
-                    continue
-                end
+            dpr = 1im * (H * pr - pr * H)
+            for b in keys(pr.terms) ∪ keys(dpr.terms)
+                #if abs(pr[b]) < 1e-10 && abs(dpr[b]) < 1e-10
+                #    continue
+                #end
                 if !(b in basis)
                     push!(basis, b)
                 end
@@ -290,6 +291,7 @@ struct AHOProgram <: ConvexProgram
                 dop = 1im * (H * op - op * H)
                 v = zeros(ComplexF64, length(basis))
                 F = zeros(ComplexF64, (length(basis),Nx+Ny))
+                @assert keys(dop.terms) ⊆ basis
                 for (k,b) in enumerate(basis)
                     v[k] = dop[b]
                     for (k′,op′) in enumerate(xops)
@@ -348,15 +350,15 @@ struct AHOProgram <: ConvexProgram
                 end
                 # Find Cmat
                 Cmat = let
-                    v = zeros(ComplexF64, length(basis))
+                    w = zeros(ComplexF64, length(basis))
                     F = zeros(ComplexF64, (length(basis),Nx))
                     for (k,b) in enumerate(basis)
-                        v[k] = op[b]
+                        w[k] = op[b]
                         for (k′,op′) in enumerate(xops)
                             F[k,k′] = op′[b]
                         end
                     end
-                    u = F \ v
+                    u = F \ w
                     mat = zeros(ComplexF64, (N,N))
                     for j in 1:Nx
                         mat += u[j] * Es[j]
@@ -365,17 +367,21 @@ struct AHOProgram <: ConvexProgram
                 end
 
                 # Find Dmat
-                dop = 1im * (H*op - op*H)
+                dop′ = 1im * (H*op - op*H)
+                dop = zero(Operator{Boson})
+                for (k,xop) in enumerate(xops)
+                    dop += (v' * d)[k] * xop
+                end
                 Dmat = let
-                    v = zeros(ComplexF64, length(basis))
+                    w = zeros(ComplexF64, length(basis))
                     F = zeros(ComplexF64, (length(basis),Nx))
                     for (k,b) in enumerate(basis)
-                        v[k] = dop[b]
+                        w[k] = dop[b]
                         for (k′,op′) in enumerate(xops)
                             F[k,k′] = op′[b]
                         end
                     end
-                    u = F \ v
+                    u = F \ w
                     mat = zeros(ComplexF64, (N,N))
                     for j in 1:Nx
                         mat += u[j] * Es[j]
@@ -517,10 +523,10 @@ end
 function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
-    #for t in LinRange(0,p.T,1 + 10*(1+p.K)) # TODO
-    for t in [0,p.T]
+    for t in LinRange(0,p.T,1 + 10*(1+p.K))
+    #for t in [0,p.T] # TODO
         Λ = Λ!(dΛ, p, y, t)
-        cb(Λ, dΛ)
+        cb(Λ + 1e-4 * I, dΛ) # TODO
     end
 end
 
