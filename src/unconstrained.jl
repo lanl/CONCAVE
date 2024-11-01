@@ -124,7 +124,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64}; H0=nothing)::Float64
     end
 
     nsteps = 0
-    for step in 1:30000
+    for step in 1:100000
         nsteps += 1
         # Get initial value and gradient.
         r₀ = f!(∇, y)
@@ -191,7 +191,7 @@ function (bfgs::BFGS)(f!, y::Vector{Float64}; H0=nothing)::Float64
         H0 .= H
     end
 
-    #println("BFGS took $nsteps steps")
+    #printstyled(stderr, "BFGS took $nsteps steps\n", color=:light_black)
 
     return f!(nothing, y)[1]
 end

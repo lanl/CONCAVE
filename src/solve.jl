@@ -12,6 +12,8 @@ import CONCAVE.Programs: initial, constraints!, objective!
 
 demo(s::Symbol; verbose=false) = demo(Val(s), verbose)
 
+const SLACK::Float64 = 0e-4
+
 # Output matrices for processing in mathematica
 function print_mathematica(x::Float64)
     expon = 0
@@ -57,7 +59,8 @@ end
 
 function aho_state_initialize!(ψ)
     ψ .= 0.0
-    ψ[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
+    #ψ[1:5] .= [0., -1.0im, 1., 0.25im, 2.0]
+    ψ[1:3] .= [1.0, 0.5, 0.25]
     ψ .= ψ / sqrt(ψ'ψ)
 end
 
@@ -86,7 +89,7 @@ struct AHOProgram <: ConvexProgram
             I,x,p,c
         end
         H = p^2 / 2 + ω^2 * x^2 / 2 + λ * x^4 / 4
-        gens = [I, x, p, x^2, p^2, x*p, x^3, x^4]
+        gens = [I, x, p, x^2, x*p, x^3, x*x*p, p^2, x^4]
         gens = gens[1:N]
         basis = []
         for g in gens, g′ in gens
@@ -526,7 +529,7 @@ function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     for t in LinRange(0,p.T,1 + 10*(1+p.K))
     #for t in [0,p.T] # TODO
         Λ = Λ!(dΛ, p, y, t)
-        cb(Λ + 1e-4 * I, dΛ) # TODO
+        cb(Λ + SLACK * I, dΛ) # TODO
     end
 end
 
@@ -535,7 +538,7 @@ function demo(::Val{:RT}, verbose)
     ω = 1.
     λ = 1.0
     T = 5.0
-    T = 1.0 # TODO
+    T = 2.0 # TODO
 
     # For diagonalizing.
     dt = 1e-1
@@ -633,15 +636,14 @@ function demo(::Val{:RT}, verbose)
     aho_state_initialize!(ψ)
     ψ₀ = copy(ψ)
     U = CONCAVE.Hamiltonians.evolution(ham, dt)
-    ψ = U*ψ
-    for t in dt:dt:T
+    for t in 0.0:dt:T
         ex = real(ψ' * ham.op["x"] * ψ)
         println("$t -1 -1 $ex $ex")
         ψ = U*ψ
     end
 
-    #for (N,K) in [(4,0), (6,0), (4,2), (6,2)]
-    for (N,K) in [(5,0)]
+    #for (N,K) in [(4,0), (4,5)]
+    for (N,K) in [(4,0), (4,3)]
         p0 = AHOProgram(ω, λ, 0.0, K, N, 1.0)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)

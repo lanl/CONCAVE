@@ -199,7 +199,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
 
     μ = 2
     ϵ = 1e-10
-    t₀ = 1.0e-3
+    t₀ = 1.0e-6
 
     t = t₀
     H = zeros(Float64, (N,N))
@@ -235,6 +235,8 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
             end
         end
         t = μ*t
+        H += 1e-6 * maximum(eigvals(Hermitian(H))) * I
+        #H .*= μ  # This does not help.
     end
 
     return objective!(g, prog, y), y
