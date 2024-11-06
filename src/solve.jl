@@ -484,6 +484,13 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     return r
 end
 
+function objective!(g, h, p::AHOProgram, y::Vector{Float64})::Float64
+    if !isnothing(h)
+        h .= 0.0
+    end
+    return objective!(g, p, y)
+end
+
 function Λ!(dΛ, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
     if !isnothing(dΛ)
         # dΛ has shape (N,N,size(p))
@@ -527,9 +534,8 @@ function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
     # Spline positivity
     for t in LinRange(0,p.T,1 + 10*(1+p.K))
-    #for t in [0,p.T] # TODO
         Λ = Λ!(dΛ, p, y, t)
-        cb(Λ + SLACK * I, dΛ) # TODO
+        cb(Λ + SLACK * I, dΛ)
     end
 end
 
