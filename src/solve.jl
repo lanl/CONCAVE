@@ -541,7 +541,7 @@ function demo(::Val{:RT}, verbose)
     T = 2.0 # TODO
 
     # For diagonalizing.
-    dt = 1e-1
+    dt = 1e-2
     p = CONCAVE.Hamiltonians.Oscillator(ω, λ)
     ham = CONCAVE.Hamiltonians.Hamiltonian(p)
     Ω = ham.F.vectors[:,1]
@@ -629,6 +629,28 @@ function demo(::Val{:RT}, verbose)
                 println("WARNING")
             end
         end
+        exit(0)
+    end
+
+    if false
+        ψ = zero(Ω)
+        aho_state_initialize!(ψ)
+        ψ₀ = copy(ψ)
+        U = CONCAVE.Hamiltonians.evolution(ham, dt)
+        print("{")
+        for t in 0.0:dt:5.0
+            ex = real(ψ' * ham.op["x"] * ψ)
+            print("{")
+            print_mathematica(t)
+            print(",")
+            print_mathematica(ex)
+            print("}")
+            if t < 5
+                ψ = U*ψ
+                println(",")
+            end
+        end
+        print("}")
         exit(0)
     end
 
