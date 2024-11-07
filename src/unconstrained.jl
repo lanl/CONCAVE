@@ -2,7 +2,7 @@
 
 module UnconstrainedOptimization
 
-export GradientDescent, LineSearch, BFGS
+export GradientDescent, LineSearch, BFGS, Newton
 export minimize!
 
 using LinearAlgebra
@@ -209,14 +209,19 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
     v::Float64 = 0.0
     for steps in 1:1000
         v = f!(g, h, y)
-        hinv = inv(h)
+        F = eigen(Symmetric(h))
+        F.values .+= 1e-8 * maximum(F.values)
+        F.values .+= 1e-20
+        hinv = inv(F)
         dy = hinv * g
         if norm(dy) < 1e-10
             return v
         end
-        y -= dy
+        if all(isfinite.(dy))
+            y -= dy
+        end
     end
-    return v
+    return f!(g, h, y)
 end
 
 function minimize!(f!, alg, y::Vector{Float64}; kwargs...)::Float64

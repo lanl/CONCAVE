@@ -13,7 +13,7 @@ export solve
 
 function feasible(p, y)::Bool
     ok = true
-    constraints!(p, y) do f,g
+    constraints!(p, y) do f,g,h
         if f isa Matrix
             if minimum(eigvals(Hermitian(f))) < 0
                 ok = false
@@ -62,7 +62,7 @@ function barrier!(g, h, p, y::Vector{Float64})::Float64
             if !isnothing(h)
                 Minv = inv(F)
                 for n in 1:N, m in 1:N
-                    h[n,m] = tr(Minv * D[:,:,n] * Minv * D[:,:,m])
+                    h[n,m] = real(tr(Minv * D[:,:,n] * Minv * D[:,:,m]))
                 end
             end
         end
@@ -170,7 +170,7 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
         if !isnothing(g)
             g .= 0.0
         end
-        constraints!(prog, y) do M,D
+        constraints!(prog, y) do M,D,H
             if any(isinf.(M)) || any(isnan.(M))
                 r = Inf
                 return
