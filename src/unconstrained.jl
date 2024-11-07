@@ -207,19 +207,23 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
     g = zeros(Float64, N)
     h = zeros(Float64, (N,N))
     v::Float64 = 0.0
-    for steps in 1:1000
+    nsteps = 1
+    while true
         v = f!(g, h, y)
         F = eigen(Symmetric(h))
-        F.values .+= 1e-8 * maximum(F.values)
-        F.values .+= 1e-10
+        F.values .+= 1e-10 * maximum(F.values)
+        F.values .+= 1e-50
         hinv = inv(F)
         dy = hinv * g
-        if norm(dy) < 1e-10
+        δ = -(g' * hinv * g) / 4
+        if norm(dy) < 1e-10 || abs(δ) / abs(v) < 1e-10
             return v
         end
+        # TODO do a little bit of BLS
         if all(isfinite.(dy))
-            y -= dy
+            y .-= dy
         end
+        nsteps += 1
     end
     return f!(g, h, y)
 end

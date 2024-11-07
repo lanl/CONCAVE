@@ -256,7 +256,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
 
     μ = 2
     ϵ = 1e-10
-    t₀ = 1.0e-6
+    t₀ = 1.0e-2
 
     t = t₀
     while t < 1/ϵ
@@ -269,15 +269,13 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
             obj = objective!(gobj, prog, y)
             bar = barrier!(gbar, h, prog, y)
             r = obj + bar/t
-            for n in 1:N
-                g[n] = gobj[n] + gbar[n]/t
-            end
+            @. g = gobj + gbar/t
             h ./= t
-            println("         ", r)
             return r
         end
         obj = objective!(g, prog, y)
         if verbose
+            # TODO why does obj not change
             println(stderr, t, " ", v, "   ", obj)
         end
         t = μ*t
