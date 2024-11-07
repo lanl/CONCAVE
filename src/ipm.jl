@@ -29,46 +29,49 @@ function feasible(p, y)::Bool
     return ok
 end
 
-function barrier!(g, p, y::Vector{Float64})::Float64
+function barrier!(g, h, p, y::Vector{Float64})::Float64
     N = length(y)
     r::Float64 = 0.
     if !isnothing(g)
         g .= 0.
     end
+    if !isnothing(h)
+        h .= 0.
+    end
 
-    function cb(M::Matrix, D)
+    function cb(M::Matrix, D, H)
+        if !isnothing(H) && H != 0
+            error("Hessian is not 0")
+        end
         F = eigen(Hermitian(M))
         if minimum(F.values) ≤ 0
             r = Inf
         end
         if r < Inf
-            if true
-                # We use the trace of the logarithm.
-                r += -sum(log.(F.values))
-                if !isnothing(g)
-                    for k in 1:length(F.values)
-                        f = F.values[k]
-                        v = F.vectors[:,k]
-                        for n in 1:N
-                            g[n] -= real(v' * D[:,:,n] * v)/f
-                        end
-                    end
-                end
-            else
-                # We just use the minimum eigenvalue.
-                f = F.values[1]
-                r += -log(f)
-                v = F.vectors[:,1]
-                if !isnothing(g)
+            # We use the trace of the logarithm.
+            r += -sum(log.(F.values))
+            if !isnothing(g)
+                for k in 1:length(F.values)
+                    f = F.values[k]
+                    v = F.vectors[:,k]
                     for n in 1:N
                         g[n] -= real(v' * D[:,:,n] * v)/f
                     end
                 end
             end
+            if !isnothing(h)
+                Minv = inv(F)
+                for n in 1:N, m in 1:N
+                    h[n,m] = tr(Minv * D[:,:,n] * Minv * D[:,:,m])
+                end
+            end
         end
     end
 
-    function cb(f::Real, d)
+    function cb(f::Real, d, H)
+        if !isnothing(H) && H != 0
+            error("Hessian is not 0")
+        end
         if f ≤ 0
             r = Inf
         end
@@ -77,6 +80,11 @@ function barrier!(g, p, y::Vector{Float64})::Float64
             if !isnothing(g)
                 for n in 1:N
                     g[n] -= d[n]/f
+                end
+            end
+            if !isnothing(h)
+                for n in 1:N, m in 1:N
+                    h[n,m] += d[n] * d[m] / f^2
                 end
             end
         end
@@ -189,7 +197,7 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
     return y
 end
 
-function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothing)::Tuple{Float64, Vector{Float64}}
+function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing)::Tuple{Float64, Vector{Float64}}
     if !feasible(prog, y)
         error("Initial point was not (strictly) feasible")
     end
@@ -206,7 +214,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
     H += I
     while t < 1/ϵ
         # Center.
-        v = minimize!(gd, y; H0=H) do g, y
+        v = minimize!(BFGS, y; H0=H) do g, y
             if any(isnan.(y)) || any(isinf.(y))
                 return Inf
             end
@@ -216,7 +224,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
                 gobj, gbar = zero(g), zero(g)
             end
             obj = objective!(gobj, prog, y)
-            bar = barrier!(gbar, prog, y)
+            bar = barrier!(gbar, nothing, prog, y)
             r = obj + bar/t
             if !isnothing(g)
                 for n in 1:N
@@ -237,6 +245,45 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false, gd=BFGS, early=nothi
         t = μ*t
         H += 1e-6 * maximum(eigvals(Hermitian(H))) * I
         #H .*= μ  # This does not help.
+    end
+
+    return objective!(g, prog, y), y
+end
+
+function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
+    if !feasible(prog, y)
+        error("Initial point was not (strictly) feasible")
+    end
+
+    N = length(y)
+    g = zero(y)
+
+    μ = 2
+    ϵ = 1e-10
+    t₀ = 1.0e-6
+
+    t = t₀
+    while t < 1/ϵ
+        # Center.
+        v = minimize!(Newton, y) do g, h, y
+            if any(isnan.(y)) || any(isinf.(y))
+                return Inf
+            end
+            gobj, gbar = zero(g), zero(g)
+            obj = objective!(gobj, prog, y)
+            bar = barrier!(gbar, h, prog, y)
+            r = obj + bar/t
+            for n in 1:N
+                g[n] = gobj[n] + gbar[n]/t
+            end
+            h ./= t
+            return r
+        end
+        obj = objective!(g, prog, y)
+        if verbose
+            println(stderr, t, " ", v, "   ", obj)
+        end
+        t = μ*t
     end
 
     return objective!(g, prog, y), y

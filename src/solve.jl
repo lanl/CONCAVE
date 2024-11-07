@@ -1,11 +1,11 @@
 using ArgParse
 using LinearAlgebra
-using Printf
 using Profile
 using REPL
 
 using CONCAVE
 using CONCAVE.Splines
+using CONCAVE.Utilities: check_gradients, print_mathematica
 
 import Base: size
 import CONCAVE.Programs: initial, constraints!, objective!
@@ -13,49 +13,6 @@ import CONCAVE.Programs: initial, constraints!, objective!
 demo(s::Symbol; verbose=false) = demo(Val(s), verbose)
 
 const SLACK::Float64 = 0e-4
-
-# Output matrices for processing in mathematica
-function print_mathematica(x::Float64)
-    expon = 0
-    while abs(x) > 10
-        x /= 10
-        expon += 1
-    end
-    while abs(x) < 1 && abs(expon) < 10
-        expon -= 1
-        x *= 10
-    end
-    @printf "%f*10^(%d)" x expon
-end
-function print_mathematica(x::ComplexF64)
-    print_mathematica(real(x))
-    if imag(x) < 0
-        print("-")
-        print_mathematica(-imag(x))
-    else
-        print("+")
-        print_mathematica(imag(x))
-    end
-    print("I")
-end
-function print_mathematica(mat::Matrix)
-    N = size(mat)[1]
-    print("{")
-    for i in 1:N
-        print("{")
-        for j in 1:N
-            print_mathematica(mat[i,j])
-            if j < N
-                print(" , ")
-            end
-        end
-        print("}")
-        if i < N
-            print(" , ")
-        end
-    end
-    print("}")
-end
 
 function aho_state_initialize!(ψ)
     ψ .= 0.0
@@ -535,7 +492,7 @@ function constraints!(cb, p::AHOProgram, y::Vector{Float64})
     # Spline positivity
     for t in LinRange(0,p.T,1 + 10*(1+p.K))
         Λ = Λ!(dΛ, p, y, t)
-        cb(Λ + SLACK * I, dΛ)
+        cb(Λ + SLACK * I, dΛ, 0)
     end
 end
 
