@@ -20,6 +20,7 @@ include("unconstrained.jl")
 include("ipm.jl")
 include("hamiltonians.jl")
 include("splines.jl")
+include("utilities.jl")
 
 using .Programs
 using .Algebras

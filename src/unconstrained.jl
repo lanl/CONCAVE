@@ -199,6 +199,26 @@ end
 struct LBFGS
 end
 
+struct Newton
+end
+
+function (newton::Newton)(f!, y::Vector{Float64})::Float64
+    N = length(y)
+    g = zeros(Float64, N)
+    h = zeros(Float64, (N,N))
+    v::Float64 = 0.0
+    for steps in 1:1000
+        v = f!(g, h, y)
+        hinv = inv(h)
+        dy = hinv * g
+        if norm(dy) < 1e-10
+            return v
+        end
+        y -= dy
+    end
+    return v
+end
+
 function minimize!(f!, alg, y::Vector{Float64}; kwargs...)::Float64
     return alg()(f!, y; kwargs...)
 end
