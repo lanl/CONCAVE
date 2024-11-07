@@ -50,19 +50,15 @@ function barrier!(g, h, p, y::Vector{Float64})::Float64
         if r < Inf
             # We use the trace of the logarithm.
             r += -sum(log.(F.values))
+            Minv = inv(F)
             if !isnothing(g)
-                for k in 1:length(F.values)
-                    f = F.values[k]
-                    v = F.vectors[:,k]
-                    for n in 1:N
-                        g[n] -= real(v' * D[:,:,n] * v)/f
-                    end
+                for n in 1:N
+                    g[n] -= real(tr(Minv * D[:,:,n]))
                 end
             end
             if !isnothing(h)
-                Minv = inv(F)
                 for n in 1:N, m in 1:N
-                    h[n,m] = real(tr(Minv * D[:,:,n] * Minv * D[:,:,m]))
+                    h[n,m] += real(tr(Minv * D[:,:,n] * Minv * D[:,:,m]))
                 end
             end
         end
@@ -277,6 +273,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
                 g[n] = gobj[n] + gbar[n]/t
             end
             h ./= t
+            println("         ", r)
             return r
         end
         obj = objective!(g, prog, y)

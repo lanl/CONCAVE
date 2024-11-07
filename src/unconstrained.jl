@@ -211,7 +211,7 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
         v = f!(g, h, y)
         F = eigen(Symmetric(h))
         F.values .+= 1e-8 * maximum(F.values)
-        F.values .+= 1e-20
+        F.values .+= 1e-10
         hinv = inv(F)
         dy = hinv * g
         if norm(dy) < 1e-10

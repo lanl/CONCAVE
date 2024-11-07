@@ -510,110 +510,22 @@ function demo(::Val{:RT}, verbose)
     Ω = ham.F.vectors[:,1]
 
     if false
-        L = 6
-        K = 2
-        plo = AHOProgram(ω, λ, T, 2, 6, 1.0)
-        phi = AHOProgram(ω, λ, T, 2, 6, -1.0)
-        p1 = CONCAVE.IPM.Phase1(phi)
-        z = initial(p1)
-        @assert CONCAVE.IPM.feasible(p1, z)
-        ϵ = 1e-4
-        g = zero(z)
-        g′ = zero(z)
-        bar = CONCAVE.IPM.barrier!(g, p1, z)
-        for i in 1:length(z)
-            z₊ = zero(z)
-            z₊ .= z
-            z₊[i] += ϵ
-            z₋ = zero(z)
-            z₋ .= z
-            z₋[i] -= ϵ
-            bar₊ = CONCAVE.IPM.barrier!(g′, p1, z₊)
-            bar₋ = CONCAVE.IPM.barrier!(g′, p1, z₋)
-            gest = (bar₊ - bar₋)/(2*ϵ)
-            rerr = abs((gest-g[i])/(gest+1e-4))
-            println(gest, "     ", g[i], "    ", rerr)
-            if rerr > 1e-4
-                println("WARNING")
-            end
-        end
-        exit(0)
-    end
-
-    if false
-        # Check phase-2 derivatives (barrier).
-        N,K = 6,2
+        # Check gradients!
+        N,K = 4,2
         plo = AHOProgram(ω, λ, T, K, N, 1.0)
         y = CONCAVE.IPM.feasible_initial(plo)
-        ϵ = 1e-5
         g = zero(y)
-        g′ = zero(y)
-        bar = CONCAVE.IPM.barrier!(g, plo, y)
-        for i in 1:length(y)
-            y₊ = zero(y)
-            y₊ .= y
-            y₊[i] += ϵ
-            y₋ = zero(y)
-            y₋ .= y
-            y₋[i] -= ϵ
-            bar₊ = CONCAVE.IPM.barrier!(g′, plo, y₊)
-            bar₋ = CONCAVE.IPM.barrier!(g′, plo, y₋)
-            gest = (bar₊ - bar₋)/(2*ϵ)
-            rerr = abs((gest-g[i])/(gest + 1e-4))
-            println(gest, "     ", g[i], "    ", rerr)
-            if rerr > 1e-4
-                println("WARNING")
-            end
+        h = zeros(Float64, (length(y),length(y)))
+        # Objective gradients.
+        CONCAVE.IPM.objective!(g, plo, y)
+        @assert check_gradients(y, g, nothing; verbose=true) do y
+            CONCAVE.IPM.objective!(nothing, plo, y)
         end
-        exit(0)
-    end
-
-    if false
-        N,K = 6,2
-        # Check phase-2 derivatives (objective).
-        plo = AHOProgram(ω, λ, T, K, N, 1.0)
-        y = CONCAVE.IPM.feasible_initial(plo)
-        ϵ = 1e-4
-        g = zero(y)
-        g′ = zero(y)
-        obj = CONCAVE.IPM.objective!(g, plo, y)
-        for i in 1:length(y)
-            y₊ = zero(y)
-            y₊ .= y
-            y₊[i] += ϵ
-            y₋ = zero(y)
-            y₋ .= y
-            y₋[i] -= ϵ
-            obj₊ = CONCAVE.IPM.objective!(g′, plo, y₊)
-            obj₋ = CONCAVE.IPM.objective!(g′, plo, y₋)
-            gest = (obj₊ - obj₋)/(2*ϵ)
-            println(gest, "     ", g[i], "    ", (gest-g[i])/(1e-5 + gest))
-            if (gest-g[i]) / gest > 1e-4
-                println("WARNING")
-            end
+        # Barrier gradients.
+        CONCAVE.IPM.barrier!(g, h, plo, y)
+        @assert check_gradients(y, g, nothing; verbose=true) do y
+            CONCAVE.IPM.barrier!(nothing, nothing, plo, y)
         end
-        exit(0)
-    end
-
-    if false
-        ψ = zero(Ω)
-        aho_state_initialize!(ψ)
-        ψ₀ = copy(ψ)
-        U = CONCAVE.Hamiltonians.evolution(ham, dt)
-        print("{")
-        for t in 0.0:dt:5.0
-            ex = real(ψ' * ham.op["x"] * ψ)
-            print("{")
-            print_mathematica(t)
-            print(",")
-            print_mathematica(ex)
-            print("}")
-            if t < 5
-                ψ = U*ψ
-                println(",")
-            end
-        end
-        print("}")
         exit(0)
     end
 
