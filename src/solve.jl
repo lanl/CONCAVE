@@ -504,7 +504,7 @@ function demo(::Val{:RT}, verbose)
     T = 2.0 # TODO
 
     # For diagonalizing.
-    dt = 1e-2
+    dt = 1e-1
     p = CONCAVE.Hamiltonians.Oscillator(ω, λ)
     ham = CONCAVE.Hamiltonians.Hamiltonian(p)
     Ω = ham.F.vectors[:,1]

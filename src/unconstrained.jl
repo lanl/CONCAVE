@@ -208,7 +208,7 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
     g = zeros(Float64, N)
     h = zeros(Float64, (N,N))
     v::Float64 = f!(g, h, y)
-    nsteps = 1
+    nsteps = 0
     while true
         F = eigen(Symmetric(h))
         F.values .+= 1e-10 * maximum(F.values)
@@ -219,7 +219,7 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
         # Termination
         δ = -(g' * hinv * g) / 4
         if norm(dy) < 1e-10 || abs(δ) / abs(v) < 1e-10
-            return v
+            break
         end
 
         # Backtracking line search
@@ -236,7 +236,7 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
         @. y = y′
 
         if α < 1e-30
-            return v
+            break
         end
 
         nsteps += 1
