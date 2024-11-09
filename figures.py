@@ -22,16 +22,24 @@ d = dat[cond,:]
 plt.fill_between(d[:,0], d[:,3], d[:,4], color='#000000', alpha=0.1)
 
 # Plot (4,3) bound
-cond = (dat[:,1] == 4) * (dat[:,2] == 3)
-d = dat[cond,:]
-plt.fill_between(d[:,0], d[:,3], d[:,4], color='#550000', alpha=0.2)
+#cond = (dat[:,1] == 4) * (dat[:,2] == 3)
+#d = dat[cond,:]
+#plt.fill_between(d[:,0], d[:,3], d[:,4], color='#550000', alpha=0.2)
 
 # Plot (9,0) bound
-cond = (dat[:,1] == 9) * (dat[:,2] == 0)
-d = dat[cond,:]
-plt.fill_between(d[:,0], d[:,3], d[:,4], color='#000066', alpha=0.3)
+#cond = (dat[:,1] == 9) * (dat[:,2] == 0)
+#d = dat[cond,:]
+#plt.fill_between(d[:,0], d[:,3], d[:,4], color='#000066', alpha=0.3)
 
-# Plot (9,3) bound
+# Plot (9,1) bound
+cond = (dat[:,1] == 9) * (dat[:,2] == 1)
+d = dat[cond,:]
+plt.fill_between(d[:,0], d[:,3], d[:,4], color='#008800', alpha=0.4)
+
+# Plot (9,2) bound
+cond = (dat[:,1] == 9) * (dat[:,2] == 2)
+d = dat[cond,:]
+plt.fill_between(d[:,0], d[:,3], d[:,4], color='#000000', alpha=0.5)
 
 plt.xlabel('$T$')
 plt.ylabel('$\\langle x(T)\\rangle$')

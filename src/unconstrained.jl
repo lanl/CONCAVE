@@ -210,14 +210,18 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
     v::Float64 = f!(g, h, y)
     nsteps = 0
     while true
-        F = eigen(Symmetric(h))
-        F.values .+= 1e-13 * maximum(F.values)
-        F.values .+= 1e-50
-        hinv = inv(F)
-        dy = -hinv * g
+        if false
+            F = eigen(Symmetric(h))
+            F.values .+= 1e-13 * maximum(F.values)
+            F.values .+= 1e-50
+            hinv = inv(F)
+            dy = -hinv * g
+        end
+        dy = -h \ g
 
         # Termination
-        δ = -(g' * hinv * g) / 4
+        #δ = -(g' * hinv * g) / 4
+        δ = (g ⋅ dy) / 4
         if norm(dy) < 1e-10 || abs(δ) / abs(v) < 1e-10
             break
         end

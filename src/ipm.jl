@@ -67,7 +67,7 @@ function barrier!(g, h, p, y::Vector{Float64})::Float64
                         # Here mat == Minv * D[:,:,n] * Minv
                         for m in 1:N
                             for i in 1:K, j in 1:K
-                                h[n,m] += real(mat[i,j] * D[j,i,m])
+                                @inbounds h[n,m] += real(mat[i,j] * D[j,i,m])
                             end
                         end
                     end

@@ -501,7 +501,6 @@ function demo(::Val{:RT}, verbose)
     ω = 1.
     λ = 1.0
     T = 5.0
-    T = 2.0 # TODO
 
     # For diagonalizing.
     dt = 1e-1
@@ -540,8 +539,8 @@ function demo(::Val{:RT}, verbose)
     end
 
     #for (N,K) in [(4,0), (4,5)]
-    for (N,K) in [(4,0), (4,3), (9,0), (9,3)]
-    #for (N,K) in [(9,3)]
+    #for (N,K) in [(4,0), (4,1), (4,2), (4,3), (9,0), (9,1), (9,2), (9,3)]
+    for (N,K) in [(4,0), (4,1), (4,2), (4,3), (9,0), (9,1), (9,2), (9,3)]
         p0 = AHOProgram(ω, λ, 0.0, K, N, 1.0)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
@@ -648,7 +647,7 @@ function main()
         λ = 1.0
         T = 1.0
         K = 1
-        p = AHOProgram(ω, λ, T, K, 6, 1.0)
+        p = AHOProgram(ω, λ, T, K, 9, 1.0)
         @profile CONCAVE.IPM.solve(p)
         open("prof-flat", "w") do f
             Profile.print(f, format=:flat, sortedby=:count)
