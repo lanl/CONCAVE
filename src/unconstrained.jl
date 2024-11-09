@@ -211,7 +211,7 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
     nsteps = 0
     while true
         F = eigen(Symmetric(h))
-        F.values .+= 1e-10 * maximum(F.values)
+        F.values .+= 1e-13 * maximum(F.values)
         F.values .+= 1e-50
         hinv = inv(F)
         dy = -hinv * g

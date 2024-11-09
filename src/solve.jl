@@ -540,7 +540,8 @@ function demo(::Val{:RT}, verbose)
     end
 
     #for (N,K) in [(4,0), (4,5)]
-    for (N,K) in [(4,0), (4,3)]
+    for (N,K) in [(4,0), (4,3), (9,0), (9,3)]
+    #for (N,K) in [(9,3)]
         p0 = AHOProgram(ω, λ, 0.0, K, N, 1.0)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
@@ -558,6 +559,7 @@ function demo(::Val{:RT}, verbose)
             end
 
             println("$t $N $K $(-lo) $hi")
+            flush(stdout)
          end
     end
 end

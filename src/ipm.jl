@@ -57,8 +57,40 @@ function barrier!(g, h, p, y::Vector{Float64})::Float64
                 end
             end
             if !isnothing(h)
-                for n in 1:N, m in 1:N
-                    h[n,m] += real(tr(Minv * D[:,:,n] * Minv * D[:,:,m]))
+                K = size(Minv)[1]
+                if true
+                    mat′ = similar(Minv)
+                    mat = similar(Minv)
+                    for n in 1:N
+                        mul!(mat′, (@view D[:,:,n]), Minv)
+                        mul!(mat, Minv, mat′)
+                        # Here mat == Minv * D[:,:,n] * Minv
+                        for m in 1:N
+                            for i in 1:K, j in 1:K
+                                h[n,m] += real(mat[i,j] * D[j,i,m])
+                            end
+                        end
+                    end
+                end
+                if false
+                    matn = similar(Minv)
+                    matm = similar(Minv)
+                    al = @allocations for n in 1:N, m in 1:N
+                        mul!(matn, Minv, D[:,:,n])
+                        mul!(matm, Minv, D[:,:,m])
+                        for i in 1:K
+                            for j in 1:K
+                                h[n,m] += real(matn[i,j] * matm[j,i])
+                            end
+                        end
+                        #h[n,m] += real(tr(Minv * D[:,:,n] * Minv * D[:,:,m]))
+                    end
+                    println("$al allocations")
+                end
+                if false
+                    for n in 1:N, m in 1:N
+                        h[n,m] += real(tr(Minv * D[:,:,n] * Minv * D[:,:,m]))
+                    end
                 end
             end
         end
@@ -275,7 +307,6 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
         end
         obj = objective!(g, prog, y)
         if verbose
-            # TODO why does obj not change
             println(stderr, t, " ", v, "   ", obj)
         end
         t = μ*t

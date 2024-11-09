@@ -31,6 +31,8 @@ cond = (dat[:,1] == 9) * (dat[:,2] == 0)
 d = dat[cond,:]
 plt.fill_between(d[:,0], d[:,3], d[:,4], color='#000066', alpha=0.3)
 
+# Plot (9,3) bound
+
 plt.xlabel('$T$')
 plt.ylabel('$\\langle x(T)\\rangle$')
 #plt.ylim([-0.08, 0.08])
