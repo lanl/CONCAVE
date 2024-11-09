@@ -204,28 +204,44 @@ end
 
 function (newton::Newton)(f!, y::Vector{Float64})::Float64
     N = length(y)
+    y′ = zero(y)
     g = zeros(Float64, N)
     h = zeros(Float64, (N,N))
-    v::Float64 = 0.0
+    v::Float64 = f!(g, h, y)
     nsteps = 1
     while true
-        v = f!(g, h, y)
         F = eigen(Symmetric(h))
         F.values .+= 1e-10 * maximum(F.values)
         F.values .+= 1e-50
         hinv = inv(F)
-        dy = hinv * g
+        dy = -hinv * g
+
+        # Termination
         δ = -(g' * hinv * g) / 4
         if norm(dy) < 1e-10 || abs(δ) / abs(v) < 1e-10
             return v
         end
-        # TODO do a little bit of BLS
-        if all(isfinite.(dy))
-            y .-= dy
+
+        # Backtracking line search
+        α = 1.0
+        m = g ⋅ dy
+        @. y′ = y + α * dy
+        v′ = f!(g, h, y′)
+        while v′ > v + 0.5 * α * m && α > 1e-30
+            α *= 0.5
+            @. y′ = y + α * dy
+            v′ = f!(g, h, y′)
         end
+        v = v′
+        @. y = y′
+
+        if α < 1e-30
+            return v
+        end
+
         nsteps += 1
     end
-    return f!(g, h, y)
+    return v
 end
 
 function minimize!(f!, alg, y::Vector{Float64}; kwargs...)::Float64

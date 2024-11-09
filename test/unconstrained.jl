@@ -14,6 +14,7 @@ using CONCAVE.Utilities: check_gradients
             b = randn(Float64, N)
             M = randn(Float64, (N,N))
             M = 0.5 * (M + M')
+            M += (0.01 - minimum(eigvals(M)))*I
 
             function f!(g, h, y)::Float64
                 if !isnothing(h)
@@ -47,8 +48,10 @@ using CONCAVE.Utilities: check_gradients
             b = randn(Float64, N)
             M₂ = randn(Float64, (N,N))
             M₂ = 0.5 * (M₂ + M₂')
+            M₂ += (0.01 - minimum(eigvals(M₂)))*I
             M₄ = randn(Float64, (N,N))
             M₄ = 0.5 * (M₄ + M₄')
+            M₄ += (0.01 - minimum(eigvals(M₄)))*I
 
             function f!(g, h, y)::Float64
                 if !isnothing(g)

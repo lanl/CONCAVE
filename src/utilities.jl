@@ -21,7 +21,9 @@ function check_gradients(f, y, g, h; verbose=false)::Bool
             return false
         end
     end
-    printstyled("Gradients match!\n", color=:green, bold=true)
+    if verbose
+        printstyled("Gradients match!\n", color=:green, bold=true)
+    end
     if isnothing(h)
         return true
     end
@@ -56,7 +58,9 @@ function check_gradients(f, y, g, h; verbose=false)::Bool
             return false
         end
     end
-    printstyled("Hessian matches!\n", color=:green, bold=true)
+    if verbose
+        printstyled("Hessian matches!\n", color=:green, bold=true)
+    end
     return true
 end
 
