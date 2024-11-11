@@ -36,9 +36,55 @@ function Hamiltonian(par::Oscillator)::Hamiltonian{Oscillator}
 end
 
 struct FermiHubbardChain
+    L::Int
+    t::Float64
+    U::Float64
 end
 
 function Hamiltonian(p::FermiHubbardChain)::Hamiltonian{FermiHubbardChain}
+    # Pauli operators
+    pauli_I::Matrix{ComplexF64} = zeros(ComplexF64, (2,2)) + I
+    pauli_X::Matrix{ComplexF64} = [0 1; 1 0]
+    pauli_Y::Matrix{ComplexF64} = [0 -1im; 1im 0]
+    pauli_Z::Matrix{ComplexF64} = [1 0; 0 -1]
+
+    D::Int = 4^p.L
+
+    # Fermion annihilation operators
+    c = Matrix{Matrix{ComplexF64}}(undef, (2,p.L))
+    for s in 1:2, x in 1:p.L
+        a = zeros(ComplexF64, (1,1)) .+ 1
+        for s′ in 1:2, x′ in 1:p.L
+            if (s,x) < (s′,x′)
+                a = kron(a, pauli_Z)
+            elseif (s,x) == (s′,x′)
+                a = kron(a, pauli_X + 1im * pauli_Y)
+            else
+                a = kron(a, pauli_I)
+            end
+        end
+        c[s,x] = a
+    end
+
+    # Construct Hamiltonian.
+    H = zeros(ComplexF64, (D,D))
+    # Hopping
+    for s in 1:2, x in 1:p.L
+        x′ = mod1(x+1,p.L)
+        H .+= -p.t * (c[s,x]' * c[s,x′] + c[s,x′]' * c[s,x])
+        println(size(H))
+    end
+    # Interaction
+    for x in 1:p.L
+        H .+= p.U * c[1,x]' * c[1,x] * c[2,x]' * c[2,x]
+    end
+
+    F = eigen(Hermitian(H))
+    return Hamiltonian{FermiHubbardChain}(Dict(),H,F)
+end
+
+function basis_state(f, p::FermiHubbardChain)
+    # TODO
 end
 
 struct LatticeNeutron
