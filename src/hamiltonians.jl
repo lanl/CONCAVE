@@ -58,7 +58,7 @@ function Hamiltonian(p::FermiHubbardChain)::Hamiltonian{FermiHubbardChain}
             if (s,x) < (s′,x′)
                 a = kron(a, pauli_Z)
             elseif (s,x) == (s′,x′)
-                a = kron(a, pauli_X + 1im * pauli_Y)
+                a = kron(a, 0.5*(pauli_X + 1im * pauli_Y))
             else
                 a = kron(a, pauli_I)
             end
@@ -72,19 +72,77 @@ function Hamiltonian(p::FermiHubbardChain)::Hamiltonian{FermiHubbardChain}
     for s in 1:2, x in 1:p.L
         x′ = mod1(x+1,p.L)
         H .+= -p.t * (c[s,x]' * c[s,x′] + c[s,x′]' * c[s,x])
-        println(size(H))
     end
     # Interaction
     for x in 1:p.L
         H .+= p.U * c[1,x]' * c[1,x] * c[2,x]' * c[2,x]
     end
 
+    # Total number
+    N = zeros(ComplexF64, (4^p.L,4^p.L))
+    for s in 1:2, x in 1:p.L
+        N += c[s,x]' * c[s,x]
+    end
+
+    # Average position
+    x̂ = zeros(ComplexF64, (D,D))
+    for s in 1:2, x in 1:p.L
+        x̂ += cos(2 * π * x / p.L) * c[s,x]' * c[s,x]
+    end
+
     F = eigen(Hermitian(H))
-    return Hamiltonian{FermiHubbardChain}(Dict(),H,F)
+    return Hamiltonian{FermiHubbardChain}(Dict("N"=>N,"x"=>x̂),H,F)
 end
 
-function basis_state(f, p::FermiHubbardChain)
-    # TODO
+function build_state(fn, p::FermiHubbardChain)::Vector{ComplexF64}
+    ψ = zeros(ComplexF64, 4^p.L)
+    for (i,nu) in enumerate(Iterators.product(ntuple(_->(false,true),p.L)))
+        for (j,nd) in enumerate(Iterators.product(ntuple(_->(false,true),p.L)))
+            ψ[(i-1)*2^p.L + j] = fn(nu,nd)
+        end
+    end
+    ψ /= norm(ψ)
+    return ψ
+end
+
+function basis_state(fn, p::FermiHubbardChain)::Vector{ComplexF64}
+    # Pauli operators
+    pauli_I::Matrix{ComplexF64} = zeros(ComplexF64, (2,2)) + I
+    pauli_X::Matrix{ComplexF64} = [0 1; 1 0]
+    pauli_Y::Matrix{ComplexF64} = [0 -1im; 1im 0]
+    pauli_Z::Matrix{ComplexF64} = [1 0; 0 -1]
+
+    D::Int = 4^p.L
+
+    # Fermion annihilation operators
+    c = Matrix{Matrix{ComplexF64}}(undef, (2,p.L))
+    for s in 1:2, x in 1:p.L
+        a = zeros(ComplexF64, (1,1)) .+ 1
+        for s′ in 1:2, x′ in 1:p.L
+            if (s,x) < (s′,x′)
+                a = kron(a, pauli_Z)
+            elseif (s,x) == (s′,x′)
+                a = kron(a, 0.5 * (pauli_X + 1im * pauli_Y))
+            else
+                a = kron(a, pauli_I)
+            end
+        end
+        c[s,x] = a
+    end
+
+    N = zeros(ComplexF64, (4^p.L,4^p.L))
+    for s in 1:2, x in 1:p.L
+        N += c[s,x]' * c[s,x]
+    end
+    F = eigen(Hermitian(N))
+
+    ψ = F.vectors[:,1]
+    for s in 1:2, x in 1:p.L
+        if fn(s,x)
+            ψ = c[s,x]' * ψ
+        end
+    end
+    return ψ
 end
 
 struct LatticeNeutron

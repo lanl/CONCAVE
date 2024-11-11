@@ -6,7 +6,7 @@ import matplotlib
 matplotlib.rcParams['mathtext.fontset'] = 'stix'
 matplotlib.rcParams['font.family'] = 'STIXGeneral'
 
-with open('x') as f:
+with open('dat.aho') as f:
     dat = np.array([[float(x) for x in l.split()] for l in f.readlines()])
 
 plt.figure(figsize=(5,3), dpi=300)
@@ -58,4 +58,28 @@ plt.ylim([-1.0, 1.0])
 plt.xlim([0,5])
 plt.tight_layout()
 plt.savefig("aho.png")
+
+with open('dat.hubbard') as f:
+    dat = np.array([[float(x) for x in l.split()] for l in f.readlines()])
+
+plt.figure(figsize=(5,3), dpi=300)
+
+# Plot exact
+cond = dat[:,1] == -1
+d = dat[cond,:]
+plt.plot(d[:,0], d[:,3], color='#000000')
+
+# Plot (4,0) bound
+#cond = (dat[:,1] == 4) * (dat[:,2] == 0)
+#d = dat[cond,:]
+#plt.fill_between(d[:,0], d[:,3], d[:,4], color='#000000', alpha=0.1)
+
+plt.xlabel('$T$')
+plt.ylabel('$\\langle x(T)\\rangle$')
+#plt.ylim([-0.08, 0.08])
+plt.ylim([-2.0, 2.0])
+plt.xlim([0,10])
+plt.tight_layout()
+plt.savefig("hubbard.png")
+
 

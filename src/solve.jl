@@ -601,16 +601,27 @@ end
 
 function demo(::Val{:HubbardRT}, verbose)
     # Parameters
-    N = 6
-    L = 6
+    L = 4
     t = 0.5
-    U = 0.5
+    U = 1.0
+    dt = 1e-1
+    T = 10.0
 
     # For diagonalizing
     fhc = CONCAVE.Hamiltonians.FermiHubbardChain(L, t, U)
     ham = CONCAVE.Hamiltonians.Hamiltonian(fhc)
-    ψ₀ = basis_state(fhc) do
-        # TODO
+    #ψ₀ = CONCAVE.Hamiltonians.build_state(fhc) do nu,nd
+    #    return 1.
+    #end
+    ψ₀ = CONCAVE.Hamiltonians.basis_state(fhc) do s,x
+        return x ≤ 2
+    end
+    ψ = copy(ψ₀)
+    U = CONCAVE.Hamiltonians.evolution(ham, dt)
+    for t in 0.0:dt:T
+        ex = real(ψ' * ham.op["x"] * ψ)
+        println("$t -1 -1 $ex $ex")
+        ψ = U*ψ
     end
 
     # Construct operators
