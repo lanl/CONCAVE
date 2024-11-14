@@ -595,12 +595,378 @@ struct HubbardRTProgram <: ConvexProgram
     sgn::Float64
 
     function HubbardRTProgram(L, t, U, T, K, N, sgn)
-        A = let
-            []
+        fhc = CONCAVE.Hamiltonians.FermiHubbardChain(L, t, U)
+        ham = CONCAVE.Hamiltonians.Hamiltonian(fhc)
+        #ψ₀ = CONCAVE.Hamiltonians.build_state(fhc) do nu,nd
+        #    return 1.
+        #end
+        ψ₀ = CONCAVE.Hamiltonians.basis_state(fhc) do s,x
+            return x ≤ 2
         end
 
+        # Construct algebra.
+        I,an = let
+            I,ban,fan = WickAlgebra()
+            an = Matrix{WickOperator}(undef, (2,L))
+            for s in 1:2, x in 1:L
+                name = "a[$s,$x]"
+                an[s,x] = fan(name)
+            end
+            an
+        end
+        # Construct Hamiltonian.
+        H = let
+            H = 0*I
+            # Hopping
+            for s in 1:2, x in 1:L
+                x′ = mod1(x+1,p.L)
+                H += -t * (an[1,x]' * an[1,x′] + an[1,x′]' * an[1,x])
+            end
+            # Interaction
+            for x in 1:L
+                H += U * an[1,x]' * an[1,x] * an[2,x]' * an[2,x]
+            end
+            H
+        end
+        # List of generators
+        gens = let
+            gens = []
+            for s in 1:2, x in 1:L
+                push!(gens, an[s,x])
+                push!(gens, an[s,x]' * an[s,x])
+            end
+            gens
+        end
+        basis = []
+        for g in gens, g′ in gens
+            pr = g′' * g
+            dpr = 1im * (H * pr - pr * H)
+            for b in keys(pr.terms) ∪ keys(dpr.terms)
+                #if abs(pr[b]) < 1e-10 && abs(dpr[b]) < 1e-10
+                #    continue
+                #end
+                if !(b in basis)
+                    push!(basis, b)
+                end
+            end
+        end
+        # Linearly independent Hermitian basis
+        hbasis = []
+        for bas in basis
+            b = Operator(bas)
+            o₊ = b + b'
+            o₋ = 1im * (b - b')
+            for o in (o₊,o₋)
+                for o′ in hbasis
+                    iprod::ComplexF64 = 0.
+                    nrm::Float64 = 0.
+                    for b in keys(o.terms) ∪ keys(o′.terms)
+                        iprod += conj(o[b]) * o′[b]
+                    end
+                    for b in keys(o′.terms)
+                        nrm += abs(o′.terms[b])^2
+                    end
+                    o = o - iprod*o′ / nrm
+                end
+                is0 = true
+                for (b,c) in o.terms
+                    if abs(c) > 1e-10
+                        is0 = false
+                    end
+                end
+                if !is0
+                    push!(hbasis, o)
+                end
+            end
+        end
+
+        # The matrix of operators
+        M = Matrix{BosonOperator}(undef, length(gens), length(gens))
+        for (i,g) in enumerate(gens)
+            for (j,g′) in enumerate(gens)
+                M[i,j] = g' * g′
+            end
+        end
+
+        # Expectation values in the initial state
+        M0 = let
+            M0 = zeros(ComplexF64, (N,N))
+            for (i,g) in enumerate(gens)
+                for (j,g′) in enumerate(gens)
+                    op = g' * g′
+                    for (b,c) in op.terms
+                        ψ = ψ₀
+                        for (name,f) in b.f
+                            # TODO
+                        end
+                        M0[i,j] += c*ψ₀'ψ
+                    end
+                end
+            end
+            M0
+        end
+ 
+        # Degrees of freedom.
+        m′ = let
+            m = Dict{Boson, Matrix{ComplexF64}}()
+            for op in basis
+                mat = zeros(ComplexF64, (N,N))
+                for i in 1:length(gens), j in 1:length(gens)
+                    mat[i,j] += M[i,j][op]
+                end
+                m[op] = mat
+            end
+            m
+        end
+        # Hermitian basis for the degrees of freedom.
+        m = let
+            m = Matrix{ComplexF64}[]
+            for mat′ in values(m′)
+                # Hermitize
+                for mat in [0.5 * (mat′' + mat′), 0.5im * (mat′' - mat′)]
+                    # Orthogonalize
+                    for a in m
+                        mat -= a * tr(mat * a') / tr(a * a')
+                    end
+                    if sum(abs.(mat)) ≥ 1e-10
+                        push!(m, mat)
+                    end
+                end
+            end
+            m
+        end
+
+        # Algebraic identities
+        A = let
+            A = Matrix{ComplexF64}[]
+            for i in 1:(length(gens)^2-length(m))
+                # Generate random Hermitian matrix.
+                mat = randn(ComplexF64, (length(gens),length(gens)))
+                mat = mat + mat'
+                # Orthogonalize against A and m
+                for a in Iterators.flatten([A,values(m)])
+                    mat -= a * tr(mat * a') / tr(a * a')
+                end
+                # Normalize
+                mat = mat / sqrt(tr(mat' * mat))
+                push!(A, mat)
+            end
+
+            A
+        end
+
+        function ip(o′,o)::ComplexF64
+            r::ComplexF64 = 0
+            for b in keys(o.terms) ∪ keys(o′.terms)
+                r += conj(o′[b]) * o[b]
+            end
+            return r
+        end
+
+        function independent(o, l)::Bool
+            # First orthogonormalize l
+            l′ = []
+            for o′ in l
+                for o′′ in l′
+                    coef = ip(o′, o′′)
+                    o′ = o′ - conj(coef) * o′′
+                end
+                if real(ip(o′,o′)) > 1e-8
+                    o′ /= sqrt(ip(o′,o′))
+                    push!(l′, o′)
+                end
+            end
+            for o′ in l′
+                coef = ip(o, o′)
+                o = o - conj(coef) * o′
+            end
+            for b in keys(o.terms)
+                if abs(o[b]) > 1e-8
+                    return true
+                end
+            end
+            return false
+        end
+
+        # Equations of motion.
         C,D,c0,λT = let
-            [], [], [], []
+            C = Matrix{ComplexF64}[]
+            D = Matrix{ComplexF64}[]
+            c0 = Float64[]
+            Cop = []
+            xops = []
+            yops = []
+            Es = []
+
+            # Construct a list of operators and extractors.
+            for i in 1:N
+                for j in 1:i
+                    op₊ = 0.5 * (M[i,j] + M[j,i])
+                    op₋ = 0.5im * (M[i,j] - M[j,i])
+                    if independent(op₊, xops)
+                        E = zeros(ComplexF64, (N,N))
+                        E[i,j] += 0.5
+                        E[j,i] += 0.5
+                        push!(xops, op₊)
+                        push!(Es, E)
+                    end
+                    if independent(op₋, xops)
+                        E = zeros(ComplexF64, (N,N))
+                        E[i,j] -= 0.5im
+                        E[j,i] += 0.5im
+                        push!(xops, op₋)
+                        push!(Es, E)
+                    end
+                end
+            end
+
+            # Construct a list of "untracked" operators.
+            for op in xops
+                dop = 1im * (H * op - op * H)
+                if independent(dop, xops ∪ yops)
+                    push!(yops, dop)
+                end
+            end
+
+            Nx = length(xops)
+            Ny = length(yops)
+
+            # Construct derivative matrices
+            d = zeros(Float64, (Nx,Nx))
+            d̃ = zeros(Float64, (Nx,Ny))
+            for (i,op) in enumerate(xops)
+                dop = 1im * (H * op - op * H)
+                v = zeros(ComplexF64, length(basis))
+                F = zeros(ComplexF64, (length(basis),Nx+Ny))
+                @assert keys(dop.terms) ⊆ basis
+                for (k,b) in enumerate(basis)
+                    v[k] = dop[b]
+                    for (k′,op′) in enumerate(xops)
+                        F[k,k′] = op′[b]
+                    end
+                    for (k′,op′) in enumerate(yops)
+                        F[k,Nx+k′] = op′[b]
+                    end
+                end
+                u = F \ v
+                @assert maximum(imag.(u)) < 1e-8
+
+                d[i,:] = real(u[1:Nx])
+                d̃[i,:] = real(u[Nx+1:Nx+Ny])
+            end
+
+            # Orthonormalize the columns of d̃.
+            d̃s = []
+            for i in 1:Ny
+                v = d̃[:,i]
+                for u in d̃s
+                    v = v - (v⋅u)*u
+                end
+                v /= sqrt(v⋅v)
+                push!(d̃s,v)
+            end
+
+            # Create an orthogonal set of degrees of freedom.
+            vs = []
+            for i in 1:Nx
+                v = randn(Float64, Nx)
+                # Orthogonalize against previous vectors.
+                for u in vs
+                    v = v - (v⋅u)*u
+                end
+
+                # Orthogonalize against columns of d̃.
+                for j in 1:Ny
+                    u = d̃s[j]
+                    v = v - (v⋅u)*u
+                end
+
+                # Normalize
+                if abs(v⋅v) ≤ 1e-8
+                    break
+                end
+                v /= sqrt(v⋅v)
+
+                push!(vs, v)
+            end
+
+            for (i,v) in enumerate(vs)
+                op = zero(Operator{Boson})
+                for (k,xop) in enumerate(xops)
+                    op += v[k] * xop
+                end
+                # Find Cmat
+                Cmat = let
+                    w = zeros(ComplexF64, length(basis))
+                    F = zeros(ComplexF64, (length(basis),Nx))
+                    for (k,b) in enumerate(basis)
+                        w[k] = op[b]
+                        for (k′,op′) in enumerate(xops)
+                            F[k,k′] = op′[b]
+                        end
+                    end
+                    u = F \ w
+                    mat = zeros(ComplexF64, (N,N))
+                    for j in 1:Nx
+                        mat += u[j] * Es[j]
+                    end
+                    mat
+                end
+
+                # Find Dmat
+                dop′ = 1im * (H*op - op*H)
+                dop = zero(Operator{Boson})
+                for (k,xop) in enumerate(xops)
+                    dop += (v' * d)[k] * xop
+                end
+                Dmat = let
+                    w = zeros(ComplexF64, length(basis))
+                    F = zeros(ComplexF64, (length(basis),Nx))
+                    for (k,b) in enumerate(basis)
+                        w[k] = dop[b]
+                        for (k′,op′) in enumerate(xops)
+                            F[k,k′] = op′[b]
+                        end
+                    end
+                    u = F \ w
+                    mat = zeros(ComplexF64, (N,N))
+                    for j in 1:Nx
+                        mat += u[j] * Es[j]
+                    end
+                    mat
+                end
+
+                # Add derivative relation
+                push!(Cop, op)
+                push!(C, Cmat)
+                push!(D, Dmat)
+                # Add initial value
+                push!(c0, real(tr(Cmat * M0)))
+            end
+
+            # Spline coefficients
+            x̂ = 0*I
+            for s in 1:2, x in 1:L
+                x̂ += cos(2*π*x/L) * an[s,x]' * an[s,x]
+            end
+            O = sgn * x
+            λT = let
+                v = zeros(ComplexF64, length(basis))
+                F = zeros(ComplexF64, (length(basis),length(C)))
+                for (k,b) in enumerate(basis)
+                    v[k] = O[b]
+                    for (k′,op) in enumerate(Cop)
+                        F[k,k′] = op[b]
+                    end
+                end
+                u = F \ v
+                ur = real.(u)
+                ui = imag.(u)
+                @assert maximum(abs.(ui)) < 1e-8
+                ur
+            end
+
+            C,D,c0,λT
         end
 
         new(L, T, K, N, A, C, D, c0, λT, sgn)
