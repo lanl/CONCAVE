@@ -582,7 +582,29 @@ function demo(::Val{:ScalarRT}, verbose)
     # Build the Hamiltonian.
 end
 
-struct HubbardRTProgram
+struct HubbardRTProgram <: ConvexProgram
+    L::Int
+    T::Float64
+    K::Int
+    N::Int
+    A::Vector{Matrix{ComplexF64}}
+    C::Vector{Matrix{ComplexF64}}
+    D::Vector{Matrix{ComplexF64}}
+    c0::Vector{Float64}
+    λT::Vector{Float64}
+    sgn::Float64
+
+    function HubbardRTProgram(L, t, U, T, K, N, sgn)
+        A = let
+            []
+        end
+
+        C,D,c0,λT = let
+            [], [], [], []
+        end
+
+        new(L, T, K, N, A, C, D, c0, λT, sgn)
+    end
 end
 
 function size(p::HubbardRTProgram)::Int
@@ -607,7 +629,7 @@ function demo(::Val{:HubbardRT}, verbose)
     dt = 1e-1
     T = 10.0
 
-    # For diagonalizing
+    # Exact result
     fhc = CONCAVE.Hamiltonians.FermiHubbardChain(L, t, U)
     ham = CONCAVE.Hamiltonians.Hamiltonian(fhc)
     #ψ₀ = CONCAVE.Hamiltonians.build_state(fhc) do nu,nd
@@ -617,16 +639,35 @@ function demo(::Val{:HubbardRT}, verbose)
         return x ≤ 2
     end
     ψ = copy(ψ₀)
-    U = CONCAVE.Hamiltonians.evolution(ham, dt)
+    Û = CONCAVE.Hamiltonians.evolution(ham, dt)
     for t in 0.0:dt:T
         ex = real(ψ' * ham.op["x"] * ψ)
         println("$t -1 -1 $ex $ex")
-        ψ = U*ψ
+        ψ = Û*ψ
     end
 
-    # Construct operators
+    for (N,K) in [(1,0)]
+        p0 = HubbardRTProgram(L, t, U, 0.0, K, N, 1.0)
+        printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
+        printstyled(stderr, "Derivatives: $(length(p0.C))\n", bold=true)
+        printstyled(stderr, "Parameters: $(size(p0))\n", bold=true)
 
-    # Build the Hamiltonian.
+        for T′ in dt:dt:T
+            plo = HubbardRTProgram(L, t, U, T′, K, N, 1.0)
+            phi = HubbardRTProgram(L, t, U, T′, K, N, -1.0)
+
+            lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
+            hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
+
+            if -lo > hi
+                println(stderr, "WARNING: primal proved infeasible")
+            end
+
+            println("$T′ $N $K $(-lo) $hi")
+        end
+        flush(stdout)
+    end
+
 end
 
 function demo(::Val{:Neutrons}, verbose)
