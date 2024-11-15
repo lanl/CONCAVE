@@ -595,31 +595,24 @@ struct HubbardRTProgram <: ConvexProgram
     sgn::Float64
 
     function HubbardRTProgram(L, t, U, T, K, N, sgn)
-        fhc = CONCAVE.Hamiltonians.FermiHubbardChain(L, t, U)
-        ham = CONCAVE.Hamiltonians.Hamiltonian(fhc)
-        #ψ₀ = CONCAVE.Hamiltonians.build_state(fhc) do nu,nd
-        #    return 1.
-        #end
-        ψ₀ = CONCAVE.Hamiltonians.basis_state(fhc) do s,x
-            return x ≤ 2
-        end
-
         # Construct algebra.
-        I,an = let
+        I,an,indices = let
             I,ban,fan = WickAlgebra()
             an = Matrix{WickOperator}(undef, (2,L))
+            indices = Dict{String,Tuple{Int,Int}}()
             for s in 1:2, x in 1:L
                 name = "a[$s,$x]"
                 an[s,x] = fan(name)
+                indices[name] = (s,x)
             end
-            an
+            I,an,indices
         end
         # Construct Hamiltonian.
         H = let
             H = 0*I
             # Hopping
             for s in 1:2, x in 1:L
-                x′ = mod1(x+1,p.L)
+                x′ = mod1(x+1,L)
                 H += -t * (an[1,x]' * an[1,x′] + an[1,x′]' * an[1,x])
             end
             # Interaction
@@ -695,11 +688,18 @@ struct HubbardRTProgram <: ConvexProgram
                 for (j,g′) in enumerate(gens)
                     op = g' * g′
                     for (b,c) in op.terms
-                        ψ = ψ₀
+                        m0::ComplexF64 = 1.0
                         for (name,f) in b.f
-                            # TODO
+                            s,x = indices[name]
+                            if f.an != f.cr
+                                m0 = 0
+                            elseif x > 2
+                                if f.an
+                                    m0 = 0
+                                end
+                            end
                         end
-                        M0[i,j] += c*ψ₀'ψ
+                        M0[i,j] = m0
                     end
                 end
             end
