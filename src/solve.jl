@@ -573,7 +573,7 @@ function demo(::Val{:SpinRT}, verbose)
     # Build the Hamiltonian.
 end
 
-struct ScalarProgram <: ScalarProgram
+struct ScalarProgram <: ConvexProgram
     T::Float64
     K::Int
     A::Vector{Matrix{ComplexF64}}
