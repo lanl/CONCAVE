@@ -35,6 +35,33 @@ function Hamiltonian(par::Oscillator)::Hamiltonian{Oscillator}
     return Hamiltonian{Oscillator}(Dict("I"=>I,"x"=>x,"p"=>p,"a"=>a),H,F)
 end
 
+struct TwoOscillators
+    ω::Float64
+    λ::Float64
+end
+
+function Hamiltonian(par::TwoOscillators)::Hamiltonian{TwoOscillators}
+    ω,λ = par.ω,par.λ
+    N = 40
+    I1 = zeros(ComplexF64, (N,N)) + I
+    c = zeros(ComplexF64, (N,N))
+    for i in 1:(N-1)
+        c[i,i+1] = sqrt(ω * i)
+    end
+    a = kron(c,I1)
+    b = kron(I1,c)
+
+    x = 1/sqrt(2*ω) * (a + a')
+    p = 1im * sqrt(ω/2) * (a' - a)
+    y = 1/sqrt(2*ω) * (b + b')
+    q = 1im * sqrt(ω/2) * (b' - b)
+
+    H = 0.5*(p^2 + q^2) + 0.5*ω^2*(x^2 + y^2) + 0.5*(x-y)^2 + 0.25*λ*(x^4 + y^4)
+
+    F = eigen(Hermitian(H))
+    return Hamiltonian{TwoOscillators}(Dict("I"=>I1,"x"=>x,"y"=>y,"x²"=>x^2,"p"=>p,"q"=>q),H,F)
+end
+
 struct FermiHubbardChain
     L::Int
     t::Float64

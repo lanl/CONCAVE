@@ -576,6 +576,7 @@ end
 struct ScalarProgram <: ConvexProgram
     T::Float64
     K::Int
+    N::Int
     A::Vector{Matrix{ComplexF64}}
     C::Vector{Matrix{ComplexF64}}
     D::Vector{Matrix{ComplexF64}}
@@ -910,7 +911,7 @@ struct ScalarProgram <: ConvexProgram
             end
 
             # Spline coefficients
-            O = sgn * x
+            O = sgn * x^2
             λT = let
                 v = zeros(ComplexF64, length(basis))
                 F = zeros(ComplexF64, (length(basis),length(C)))
@@ -930,7 +931,7 @@ struct ScalarProgram <: ConvexProgram
             C,D,c0,λT
         end
 
-        return new(T,K,A,C,D,c0,λT,sgn)
+        return new(T,K,N,A,C,D,c0,λT,sgn)
     end
 end
 
@@ -1036,6 +1037,22 @@ function demo(::Val{:ScalarRT}, verbose)
     T = 10.0
     m = 0.5
     λ = 0.5
+
+    # For diagonalizing.
+    dt = 1e-1
+    p = CONCAVE.Hamiltonians.TwoOscillators(m, λ)
+    ham = CONCAVE.Hamiltonians.Hamiltonian(p)
+    Ω = ham.F.vectors[:,1]
+
+    ψ = zero(Ω)
+    ψ[1] = 1.0
+    ψ₀ = copy(ψ)
+    U = CONCAVE.Hamiltonians.evolution(ham, dt)
+    for t in 0.0:dt:T
+        ex = real(ψ' * ham.op["x²"] * ψ)
+        println("$t -1 -1 $ex $ex")
+        ψ = U*ψ
+    end
 
     for (N,K) in Iterators.product([1,2],[4],[0,1])
         p0 = ScalarProgram(m, λ, 0.0, K, 1.0)
