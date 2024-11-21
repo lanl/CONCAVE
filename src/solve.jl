@@ -586,8 +586,8 @@ struct ScalarProgram <: ConvexProgram
     function ScalarProgram(ω, λ, T, K, sgn)
         I,x,y,p,q,cx,cy = let
             I,ban,fan = WickAlgebra()
-            a = ban["x"]
-            b = ban["y"]
+            a = ban("x")
+            b = ban("y")
             x = sqrt(1/(2*ω)) * (a + a')
             y = sqrt(1/(2*ω)) * (b + b')
             p = 1im * sqrt(ω/2) * (a' - a)
@@ -641,7 +641,7 @@ struct ScalarProgram <: ConvexProgram
         end
 
         # The matrix of operators
-        M = Matrix{BosonOperator}(undef, length(gens), length(gens))
+        M = Matrix{WickOperator}(undef, length(gens), length(gens))
         for (i,g) in enumerate(gens)
             for (j,g′) in enumerate(gens)
                 M[i,j] = g' * g′
@@ -654,8 +654,9 @@ struct ScalarProgram <: ConvexProgram
                 for (j,g′) in enumerate(gens)
                     op = g' * g′
                     for (b,c) in op.terms
-                        bx = b.b["x"]
-                        by = b.b["y"]
+                        bI = Boson(0,0)
+                        bx = "x" in keys(b.b) ? b.b["x"] : bI
+                        by = "y" in keys(b.b) ? b.b["y"] : bI
                         # Both oscillators start in the harmonic ground state.
                         function gnd_expect(b::Boson)::ComplexF64
                             if b.cr == 0 && b.an == 0
@@ -672,7 +673,7 @@ struct ScalarProgram <: ConvexProgram
 
         # Degrees of freedom.
         m′ = let
-            m = Dict{Boson, Matrix{ComplexF64}}()
+            m = Dict{Wick, Matrix{ComplexF64}}()
             for op in basis
                 mat = zeros(ComplexF64, (N,N))
                 for i in 1:length(gens), j in 1:length(gens)
@@ -855,7 +856,7 @@ struct ScalarProgram <: ConvexProgram
             end
 
             for (i,v) in enumerate(vs)
-                op = zero(Operator{Boson})
+                op = zero(WickOperator)
                 for (k,xop) in enumerate(xops)
                     op += v[k] * xop
                 end
@@ -879,7 +880,7 @@ struct ScalarProgram <: ConvexProgram
 
                 # Find Dmat
                 dop′ = 1im * (H*op - op*H)
-                dop = zero(Operator{Boson})
+                dop = zero(WickOperator)
                 for (k,xop) in enumerate(xops)
                     dop += (v' * d)[k] * xop
                 end
@@ -930,6 +931,101 @@ struct ScalarProgram <: ConvexProgram
         end
 
         return new(T,K,A,C,D,c0,λT,sgn)
+    end
+end
+
+function size(p::ScalarProgram)::Int
+    return length(p.A) * (3 + p.K) + length(p.C) * (2 + p.K)
+end
+
+function initial(p::ScalarProgram)::Vector{Float64}
+    return rand(Float64, size(p))
+end
+
+function objective!(g, p::ScalarProgram, y::Vector{Float64})::Float64
+    if !isnothing(g)
+        g .= 0.0
+    end
+    r::Float64 = 0.0
+    spline = QuadraticSpline(p.T, p.K)
+    o::Int = 0
+    # Run up the offset
+    for (i,A) in enumerate(p.A)
+        o += 3+p.K
+    end
+    # Boundary values
+    for (k,C) in enumerate(p.C)
+        spline.c[1] = p.λT[k]
+        spline.c[2:end] = y[1+o:2+p.K+o]
+        at!(spline, p.T)
+        r += spline.f * p.c0[k]
+        if !isnothing(g)
+            for (j,∂) in enumerate(spline.∂c[2:end])
+                g[o+j] += p.c0[k] * ∂
+            end
+        end
+        o += 2+p.K
+    end
+
+    r *= -1
+    if !isnothing(g)
+        g .*= -1
+    end
+    return r
+end
+
+function objective!(g, h, p::ScalarProgram, y::Vector{Float64})::Float64
+    if !isnothing(h)
+        h .= 0.0
+    end
+    return objective!(g, p, y)
+end
+
+function Λ!(dΛ, p::ScalarProgram, y::Vector{Float64}, t::Float64)::Matrix{ComplexF64}
+    if !isnothing(dΛ)
+        # dΛ has shape (N,N,size(p))
+        dΛ .= 0.
+    end
+    spline = QuadraticSpline(p.T, p.K)
+    Λ::Matrix{ComplexF64} = zeros(ComplexF64, (p.N,p.N))
+    o::Int = 0
+    @views for (i,A) in enumerate(p.A)
+        spline.c[1:end] .= y[1+o:3+p.K+o]
+        at!(spline, p.T-t)
+        Λ .+= spline.f .* A
+        if !isnothing(dΛ)
+            for (j,∂) in enumerate(spline.∂c[1:end])
+                dΛ[:,:,j+o] .+= A .* ∂
+            end
+        end
+        o += 3+p.K
+    end
+    @views for (i,C) in enumerate(p.C)
+        D = p.D[i]
+        spline.c[1] = p.λT[i]
+        spline.c[2:end] .= y[1+o:2+p.K+o]
+        at!(spline, p.T-t)
+        Λ .+= spline.f .* D
+        Λ .-= spline.f′ .* C # My spline has t reversed
+        if !isnothing(dΛ)
+            for j in 2:length(spline.∂c)
+                ∂ = spline.∂c[j]
+                ∂′ = spline.∂c′[j]
+                dΛ[:,:,j+o-1] .+= ∂ .* D
+                dΛ[:,:,j+o-1] .-= ∂′ .* C
+            end
+        end
+        o += 2+p.K
+    end
+    return Λ
+end
+
+function constraints!(cb, p::ScalarProgram, y::Vector{Float64})
+    dΛ = zeros(ComplexF64, (p.N, p.N, size(p)))
+    # Spline positivity
+    for t in LinRange(0,p.T,1 + 10*(1+p.K))
+        Λ = Λ!(dΛ, p, y, t)
+        cb(Λ + SLACK * I, dΛ, 0)
     end
 end
 
