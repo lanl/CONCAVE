@@ -500,7 +500,7 @@ function demo(::Val{:RT}, verbose)
     # Parameters.
     ω = 1.
     λ = 1.0
-    T = 5.0
+    T = 8.0
 
     # For diagonalizing.
     dt = 1e-1
@@ -540,7 +540,7 @@ function demo(::Val{:RT}, verbose)
 
     #for (N,K) in [(4,0), (4,5)]
     #for (N,K) in [(4,0), (4,1), (4,2), (4,3), (9,0), (9,1), (9,2), (9,3)]
-    for (N,K) in [(4,0), (4,1), (4,2), (4,3), (9,0), (9,1), (9,2), (9,3)]
+    for (N,K) in [(4,0), (4,3), (9,3), (9,6)]
         p0 = AHOProgram(ω, λ, 0.0, K, N, 1.0)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
@@ -1035,7 +1035,7 @@ function demo(::Val{:ScalarRT}, verbose)
     N = 4
     dt = 5e-1
     T = 10.0
-    m = 0.5
+    m = 1.0
     λ = 0.5
 
     # For diagonalizing.
@@ -1054,7 +1054,8 @@ function demo(::Val{:ScalarRT}, verbose)
         ψ = U*ψ
     end
 
-    for (N,K) in Iterators.product([1,2],[4],[0,1])
+    #for (N,K) in Iterators.product([1,2],[4],[0,1])
+    for (N,K) in [(1,0),(1,1),(1,2),(1,3)]
         p0 = ScalarProgram(m, λ, 0.0, K, 1.0)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
