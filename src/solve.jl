@@ -584,7 +584,7 @@ struct ScalarProgram <: ConvexProgram
     λT::Vector{Float64}
     sgn::Float64
 
-    function ScalarProgram(ω, λ, T, K, sgn)
+    function ScalarProgram(ω, λ, T, K, N, sgn)
         I,x,y,p,q,cx,cy = let
             I,ban,fan = WickAlgebra()
             a = ban("x")
@@ -596,8 +596,9 @@ struct ScalarProgram <: ConvexProgram
             I,x,y,p,q,a,b
         end
         H = (p^2 + q^2)/2 + ω^2 / 2 * (x^2 + y^2) + λ/4 * (x^4 + y^4) + (x-y)^2/2
-        gens = [I,x,y,p,q,x^2,y^2]
-        N = length(gens)
+        gens = [I,x,y,p,q,x^2,y^2,x*y,x*p,y*q,x^3,y^3,x*q,y*p,x^2*y,y^2*x]
+        gens = gens[1:N]
+        #N = length(gens)
         basis = []
         for g in gens, g′ in gens
             pr = g′' * g
@@ -1034,7 +1035,8 @@ function demo(::Val{:ScalarRT}, verbose)
     # Parameters
     N = 4
     dt = 5e-1
-    T = 10.0
+    #T = 2.5
+    T = 0.5
     m = 1.0
     λ = 0.5
 
@@ -1055,15 +1057,15 @@ function demo(::Val{:ScalarRT}, verbose)
     end
 
     #for (N,K) in Iterators.product([1,2],[4],[0,1])
-    for (N,K) in [(1,0),(1,1),(1,2),(1,3)]
-        p0 = ScalarProgram(m, λ, 0.0, K, 1.0)
+    for (N,K) in [(16,0),(7,0),(8,0)]
+        p0 = ScalarProgram(m, λ, 0.0, K, N, 1.0)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
         printstyled(stderr, "Derivatives: $(length(p0.C))\n", bold=true)
         printstyled(stderr, "Parameters: $(size(p0))\n", bold=true)
         for t in dt:dt:T
-            plo = ScalarProgram(m, λ, t, K, 1.0)
-            phi = ScalarProgram(m, λ, t, K, -1.0)
+            plo = ScalarProgram(m, λ, t, K, N, 1.0)
+            phi = ScalarProgram(m, λ, t, K, N, -1.0)
 
             lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
             hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
