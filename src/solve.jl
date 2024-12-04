@@ -539,8 +539,8 @@ function demo(::Val{:RT}, verbose)
     end
 
     #for (N,K) in [(4,0), (4,5)]
-    #for (N,K) in [(4,0), (4,1), (4,2), (4,3), (9,0), (9,1), (9,2), (9,3)]
-    for (N,K) in [(4,0), (4,3), (9,3), (9,6)]
+    for (N,K) in [(4,0), (4,1), (4,2), (4,3), (9,0), (9,1), (9,2), (9,3)]
+    #for (N,K) in [(4,0), (4,3), (9,3), (9,6)]
         p0 = AHOProgram(ω, λ, 0.0, K, N, 1.0)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
@@ -1555,6 +1555,66 @@ end
 function demo(::Val{:Coulomb}, verbose)
 end
 
+function demo(::Val{:Algebra}, verbose)
+    ω = 1.0
+    λ = 1.0
+    I,x,y,p,q,cx,cy = let
+        I,ban,fan = WickAlgebra()
+        a = ban("x")
+        b = ban("y")
+        x = sqrt(1/(2*ω)) * (a + a')
+        y = sqrt(1/(2*ω)) * (b + b')
+        p = 1im * sqrt(ω/2) * (a' - a)
+        q = 1im * sqrt(ω/2) * (b' - b)
+        I,x,y,p,q,a,b
+    end
+    H = (p^2 + q^2)/2 + ω^2 / 2 * (x^2 + y^2) + λ/4 * (x^4 + y^4) + (x-y)^2/2
+    #gens = [I,x,y,p,q,x^2,y^2,x*y,x*p,y*q,x^3,y^3,x*q,y*p,x^2*y,y^2*x]
+    gens = [I,x,y,p,q,x^2,y^2,x*y]
+    basis = []
+    for g in gens, g′ in gens
+        pr = g′' * g
+        dpr = 1im * (H * pr - pr * H)
+        for b in keys(pr.terms) ∪ keys(dpr.terms)
+            #if abs(pr[b]) < 1e-10 && abs(dpr[b]) < 1e-10
+            #    continue
+            #end
+            if !(b in basis)
+                push!(basis, b)
+            end
+        end
+    end
+    # Linearly independent Hermitian basis
+    hbasis = []
+    for bas in basis
+        b = Operator(bas)
+        o₊ = b + b'
+        o₋ = 1im * (b - b')
+        for o in (o₊,o₋)
+            for o′ in hbasis
+                iprod::ComplexF64 = 0.
+                nrm::Float64 = 0.
+                for b in keys(o.terms) ∪ keys(o′.terms)
+                    iprod += conj(o[b]) * o′[b]
+                end
+                for b in keys(o′.terms)
+                    nrm += abs(o′.terms[b])^2
+                end
+                o = o - iprod*o′ / nrm
+            end
+            is0 = true
+            for (b,c) in o.terms
+                if abs(c) > 1e-10
+                    is0 = false
+                end
+            end
+            if !is0
+                push!(hbasis, o)
+            end
+        end
+    end
+end
+
 function main()
     args = let
         s = ArgParseSettings()
@@ -1569,24 +1629,40 @@ function main()
         parse_args(s)
     end
 
+    function action()
+        if !isnothing(args["demo"])
+            demo(args["demo"]; verbose=args["verbose"])
+            return
+        end
+    end
+
     if args["profile"]
-        ω = 1.0
-        λ = 1.0
-        T = 1.0
-        K = 1
-        p = AHOProgram(ω, λ, T, K, 9, 1.0)
-        @profile CONCAVE.IPM.solve(p)
+        @profile action()
         open("prof-flat", "w") do f
             Profile.print(f, format=:flat, sortedby=:count)
         end
         open("prof-tree", "w") do f
             Profile.print(f, noisefloor=2.0)
         end
+    else
+        action()
     end
 
-    if !isnothing(args["demo"])
-        demo(args["demo"]; verbose=args["verbose"])
-        return
+    if args["profile"]
+        if false
+            ω = 1.0
+            λ = 1.0
+            T = 1.0
+            K = 1
+            p = AHOProgram(ω, λ, T, K, 9, 1.0)
+            @profile CONCAVE.IPM.solve(p)
+            open("prof-flat", "w") do f
+                Profile.print(f, format=:flat, sortedby=:count)
+            end
+            open("prof-tree", "w") do f
+                Profile.print(f, noisefloor=2.0)
+            end
+        end
     end
 end
 
