@@ -1099,8 +1099,8 @@ function demo(::Val{:ScalarRT}, verbose)
     # Parameters
     N = 4
     dt = 5e-1
-    #T = 2.5
-    T = 0.5
+    T = 2.5
+    #T = 0.5
     m = 1.0
     λ = 0.5
 
@@ -1121,7 +1121,7 @@ function demo(::Val{:ScalarRT}, verbose)
     end
 
     #for (N,K) in Iterators.product([1,2],[4],[0,1])
-    for (N,K) in [(26,0),(8,0)]
+    for K in 0:6, N in (8,26)
         p0 = ScalarProgram(m, λ, 0.0, K, N, 1.0; verbose=verbose)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
