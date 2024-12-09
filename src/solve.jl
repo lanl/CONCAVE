@@ -852,7 +852,7 @@ struct ScalarProgram <: ConvexProgram
             for (k,op) in enumerate(xops)
                 vlog("    $k   of $(length(xops))")
                 dop = 1im * (H * op - op * H)
-                if independent(dop, xops) && independent(dop, yops)
+                if independent(dop, xops ∪ yops)
                     push!(yops, dop)
                 end
             end
@@ -1121,7 +1121,8 @@ function demo(::Val{:ScalarRT}, verbose)
     end
 
     #for (N,K) in Iterators.product([1,2],[4],[0,1])
-    for K in 0:6, N in (8,26)
+    for (N,K) in [(8,0),(8,3),(26,0),(26,1),(26,2),(26,3),(26,4),(26,5),(26,6)]
+    #for K in 0:6, N in (8,26)
         p0 = ScalarProgram(m, λ, 0.0, K, N, 1.0; verbose=verbose)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
