@@ -14,6 +14,8 @@ export Boson, BosonAlgebra, BosonOperator
 export Spins, SpinAlgebra, SpinOperator
 export Wick, WickAlgebra, WickOperator
 
+export add!, scale!
+
 include("programs.jl")
 include("algebra.jl")
 include("unconstrained.jl")

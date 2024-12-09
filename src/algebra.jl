@@ -21,6 +21,8 @@ export Boson, BosonAlgebra, BosonOperator
 export Spins, SpinAlgebra, SpinOperator
 export Wick, WickAlgebra, WickOperator
 
+export add!,scale!
+
 abstract type Basis end
 
 struct Operator{B<:Basis}
@@ -91,9 +93,18 @@ end
 
 function add!(a::Operator{B}, b::Operator{B}, c::ComplexF64=one(ComplexF64))::Operator{B} where {B}
     for op in keys(b.terms)
-        a[op] = a[op] + c*b[op]
+        if !(op in keys(a.terms))
+            a.terms[op] = 0.0
+        end
+        a.terms[op] = a.terms[op] + c*b.terms[op]
     end
     return a
+end
+
+function scale!(a::Operator{B}, c::ComplexF64) where {B}
+    for op in keys(a.terms)
+        a[op] = c*a[op]
+    end
 end
 
 function +(a::Operator{B}, b::Operator{B})::Operator{B} where {B}
@@ -119,7 +130,8 @@ function *(a::Operator{B}, b::Operator{B})::Operator{B} where {B}
     r = zero(Operator{B})
     for a′ in keys(a.terms)
         for b′ in keys(b.terms)
-            r += a[a′]*b[b′] * (a′*b′)
+            #r += a[a′]*b[b′] * (a′*b′)
+            add!(r, a′*b′, a[a′]*b[b′])
         end
     end
     return r
@@ -369,7 +381,20 @@ function adjoint(a::Boson)::BosonOperator
     return Operator(Boson(a.an, a.cr))
 end
 
+function bprod(cb, β::Int, γ::Int)
+    m::Int = min(β,γ)
+    M::Int = max(β,γ)
+    for i in 0:m
+        cb(binomial(m,i) * factorial(M) / factorial(M-i), β-i,γ-i)
+    end
+end
+
 function *(a::Boson, b::Boson)::BosonOperator
+    r = Operator{Boson}()
+    all = @allocations bprod(a.an,b.cr) do c, β′, γ′
+        r.terms[Boson(a.cr+γ′,b.an+β′)] = c
+    end
+    return r
     # Base case:
     if a.an == 0
         return Operator(Boson(a.cr+b.cr,b.an))

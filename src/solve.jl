@@ -32,6 +32,10 @@ struct AHOProgram <: ConvexProgram
     λT::Vector{Float64}
     sgn::Float64
 
+    function AHOProgram(p0, t, sgn)
+        return new(t,p0.K,p0.N,p0.A,p0.C,p0.D,p0.c0,p0.λT,sgn)
+    end
+
     function AHOProgram(ω, λ, T, K, N, sgn)
         osc = CONCAVE.Hamiltonians.Oscillator(ω, λ)
         ham = CONCAVE.Hamiltonians.Hamiltonian(osc)
@@ -68,7 +72,8 @@ struct AHOProgram <: ConvexProgram
             o₊ = b + b'
             o₋ = 1im * (b - b')
             for o in (o₊,o₋)
-                for o′ in hbasis
+                for hbasis_op in hbasis
+                    o′ = copy(hbasis_op)
                     iprod::ComplexF64 = 0.
                     nrm::Float64 = 0.
                     for b in keys(o.terms) ∪ keys(o′.terms)
@@ -77,7 +82,9 @@ struct AHOProgram <: ConvexProgram
                     for b in keys(o′.terms)
                         nrm += abs(o′.terms[b])^2
                     end
-                    o = o - iprod*o′ / nrm
+                    scale!(o′, -iprod/nrm)
+                    add!(o, o′)
+                    #o = o - iprod*o′ / nrm
                 end
                 is0 = true
                 for (b,c) in o.terms
@@ -170,28 +177,35 @@ struct AHOProgram <: ConvexProgram
 
         function ip(o′,o)::ComplexF64
             r::ComplexF64 = 0
-            for b in keys(o.terms) ∪ keys(o′.terms)
-                r += conj(o′[b]) * o[b]
+            for b in keys(o.terms)# ∪ keys(o′.terms)
+                if b in keys(o′.terms)
+                    r += conj(o′.terms[b]) * o.terms[b]
+                end
             end
             return r
         end
 
         function independent(o, l)::Bool
+            o = copy(o)
             # First orthogonormalize l
             l′ = []
-            for o′ in l
+            for lo in l
+                o′ = copy(lo)
                 for o′′ in l′
                     coef = ip(o′, o′′)
-                    o′ = o′ - conj(coef) * o′′
+                    add!(o′, o′′, -conj(coef))
+                    #o′ = o′ - conj(coef) * o′′
                 end
-                if real(ip(o′,o′)) > 1e-8
-                    o′ /= sqrt(ip(o′,o′))
+                nrm = ip(o′,o′)
+                if real(nrm) > 1e-8
+                    scale!(o′, 1/sqrt(nrm))
                     push!(l′, o′)
                 end
             end
             for o′ in l′
                 coef = ip(o, o′)
-                o = o - conj(coef) * o′
+                add!(o, o′, -conj(coef))
+                #o = o - conj(coef) * o′
             end
             for b in keys(o.terms)
                 if abs(o[b]) > 1e-8
@@ -358,7 +372,7 @@ struct AHOProgram <: ConvexProgram
             end
 
             # Spline coefficients
-            O = sgn * x
+            O = x
             λT = let
                 v = zeros(ComplexF64, length(basis))
                 F = zeros(ComplexF64, (length(basis),length(C)))
@@ -422,7 +436,7 @@ function objective!(g, p::AHOProgram, y::Vector{Float64})::Float64
     end
     # Boundary values
     for (k,C) in enumerate(p.C)
-        spline.c[1] = p.λT[k]
+        spline.c[1] = p.sgn * p.λT[k]
         spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T)
         r += spline.f * p.c0[k]
@@ -469,7 +483,7 @@ function Λ!(dΛ, p::AHOProgram, y::Vector{Float64}, t::Float64)::Matrix{Complex
     end
     @views for (i,C) in enumerate(p.C)
         D = p.D[i]
-        spline.c[1] = p.λT[i]
+        spline.c[1] = p.sgn * p.λT[i]
         spline.c[2:end] .= y[1+o:2+p.K+o]
         at!(spline, p.T-t)
         Λ .+= spline.f .* D
@@ -547,8 +561,10 @@ function demo(::Val{:RT}, verbose)
         printstyled(stderr, "Derivatives: $(length(p0.C))\n", bold=true)
         printstyled(stderr, "Parameters: $(size(p0))\n", bold=true)
         for t in dt:dt:T
-            plo = AHOProgram(ω, λ, t, K, N, 1.0)
-            phi = AHOProgram(ω, λ, t, K, N, -1.0)
+            plo = AHOProgram(p0, t, 1.0)
+            phi = AHOProgram(p0, t, -1.0)
+            #plo = AHOProgram(ω, λ, t, K, N, 1.0)
+            #phi = AHOProgram(ω, λ, t, K, N, -1.0)
 
             lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
             hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
@@ -584,7 +600,17 @@ struct ScalarProgram <: ConvexProgram
     λT::Vector{Float64}
     sgn::Float64
 
-    function ScalarProgram(ω, λ, T, K, N, sgn)
+    function ScalarProgram(p0, t, sgn)
+        return new(t,p0.K,p0.N,p0.A,p0.C,p0.D,p0.c0,p0.λT,sgn)
+    end
+
+    function ScalarProgram(ω, λ, T, K, N, sgn; verbose=false)
+        vlog = function(a...)
+            if verbose
+                printstyled(stderr, a...; italic=true)
+                println(stderr)
+            end
+        end
         I,x,y,p,q,cx,cy = let
             I,ban,fan = WickAlgebra()
             a = ban("x")
@@ -596,10 +622,15 @@ struct ScalarProgram <: ConvexProgram
             I,x,y,p,q,a,b
         end
         H = (p^2 + q^2)/2 + ω^2 / 2 * (x^2 + y^2) + λ/4 * (x^4 + y^4) + (x-y)^2/2
-        gens = [I,x,y,p,q,x^2,y^2,x*y,x*p,y*q,x^3,y^3,x*q,y*p,x^2*y,y^2*x]
+        #gens = [I,x,y,p,q,x^2,y^2,x*y,x*p,y*q,x^3,y^3,x*q,y*p,x^2*y,y^2*x]
+        gens = [I]
+        append!(gens, [x,y])
+        append!(gens, [p,q,x^2,y^2,x*y])
+        append!(gens, [x*p,y*q,x^3,y^3,x*q,y*p,x^2*y,y^2*x])
+        append!(gens, [x^4, y^4, p^2, q^2, x^2*y^2, p*q, x^2*p, x^2*q, y^2*p, y^2*q])
         gens = gens[1:N]
         #N = length(gens)
-        basis = []
+        basis_set::Set{Wick} = Set()
         for g in gens, g′ in gens
             pr = g′' * g
             dpr = 1im * (H * pr - pr * H)
@@ -607,37 +638,54 @@ struct ScalarProgram <: ConvexProgram
                 #if abs(pr[b]) < 1e-10 && abs(dpr[b]) < 1e-10
                 #    continue
                 #end
-                if !(b in basis)
-                    push!(basis, b)
+                if !(b in basis_set)
+                    push!(basis_set, b)
                 end
             end
         end
+        basis = collect(basis_set)
         # Linearly independent Hermitian basis
+        vlog("Computing Hermitian basis")
         hbasis = []
-        for bas in basis
-            b = Operator(bas)
-            o₊ = b + b'
-            o₋ = 1im * (b - b')
-            for o in (o₊,o₋)
-                for o′ in hbasis
-                    iprod::ComplexF64 = 0.
-                    nrm::Float64 = 0.
-                    for b in keys(o.terms) ∪ keys(o′.terms)
-                        iprod += conj(o[b]) * o′[b]
-                    end
-                    for b in keys(o′.terms)
-                        nrm += abs(o′.terms[b])^2
-                    end
-                    o = o - iprod*o′ / nrm
+        if true
+            for bas in basis
+                o = Operator(bas)
+                push!(hbasis, o+o')
+                if !(o ≈ o')
+                    push!(hbasis, 1im * (o-o'))
                 end
-                is0 = true
-                for (b,c) in o.terms
-                    if abs(c) > 1e-10
-                        is0 = false
+            end
+        else
+            for (k,bas) in enumerate(basis)
+                println(k, " ", length(basis))
+                println(length(hbasis))
+                b = Operator(bas)
+                o₊ = b + b'
+                o₋ = 1im * (b - b')
+                for o in (o₊,o₋)
+                    for hbasis_op in hbasis
+                        o′ = copy(hbasis_op)
+                        iprod::ComplexF64 = 0.
+                        nrm::Float64 = 0.
+                        for b in keys(o.terms) ∪ keys(o′.terms)
+                            iprod += conj(o[b]) * o′[b]
+                        end
+                        for b in keys(o′.terms)
+                            nrm += abs(o′.terms[b])^2
+                        end
+                        scale!(o′, -iprod/nrm)
+                        add!(o, o′)
+                        #o = o - iprod*o′ / nrm
                     end
-                end
-                if !is0
-                    push!(hbasis, o)
+                    is0 = true
+                    for (b,c) in o.terms
+                        if abs(c) > 1e-10
+                            is0 = false
+                        end
+                    end
+                    if !is0
+                        push!(hbasis, o)
+                    end
                 end
             end
         end
@@ -650,6 +698,7 @@ struct ScalarProgram <: ConvexProgram
             end
         end
         # Expectation values in the initial state
+        vlog("Getting expectation values")
         M0 = let
             M0 = zeros(ComplexF64, (N,N))
             for (i,g) in enumerate(gens)
@@ -674,6 +723,7 @@ struct ScalarProgram <: ConvexProgram
         end
 
         # Degrees of freedom.
+        vlog("Degrees of freedom")
         m′ = let
             m = Dict{Wick, Matrix{ComplexF64}}()
             for op in basis
@@ -686,6 +736,7 @@ struct ScalarProgram <: ConvexProgram
             m
         end
         # Hermitian basis for the degrees of freedom.
+        vlog("Getting Hermitian basis for the degrees of freedom")
         m = let
             m = Matrix{ComplexF64}[]
             for mat′ in values(m′)
@@ -704,6 +755,7 @@ struct ScalarProgram <: ConvexProgram
         end
 
         # Algebraic identities
+        vlog("Computing algebraic identities")
         A = let
             A = Matrix{ComplexF64}[]
             for i in 1:(length(gens)^2-length(m))
@@ -724,28 +776,33 @@ struct ScalarProgram <: ConvexProgram
 
         function ip(o′,o)::ComplexF64
             r::ComplexF64 = 0
-            for b in keys(o.terms) ∪ keys(o′.terms)
-                r += conj(o′[b]) * o[b]
+            for b in keys(o.terms)# ∪ keys(o′.terms)
+                if b in keys(o′.terms)
+                    r += conj(o′.terms[b]) * o.terms[b]
+                end
             end
             return r
         end
 
         function independent(o, l)::Bool
+            o = copy(o)
             # First orthogonormalize l
             l′ = []
-            for o′ in l
+            for lo in l
+                o′ = copy(lo)
                 for o′′ in l′
                     coef = ip(o′, o′′)
-                    o′ = o′ - conj(coef) * o′′
+                    add!(o′, o′′, -conj(coef))
                 end
-                if real(ip(o′,o′)) > 1e-8
-                    o′ /= sqrt(ip(o′,o′))
+                nrm = ip(o′,o′)
+                if real(nrm) > 1e-8
+                    scale!(o′, 1/sqrt(nrm))
                     push!(l′, o′)
                 end
             end
             for o′ in l′
                 coef = ip(o, o′)
-                o = o - conj(coef) * o′
+                add!(o, o′, -conj(coef))
             end
             for b in keys(o.terms)
                 if abs(o[b]) > 1e-8
@@ -756,6 +813,7 @@ struct ScalarProgram <: ConvexProgram
         end
 
         # Equations of motion.
+        vlog("Equations of motion")
         C,D,c0,λT = let
             C = Matrix{ComplexF64}[]
             D = Matrix{ComplexF64}[]
@@ -766,8 +824,10 @@ struct ScalarProgram <: ConvexProgram
             Es = []
 
             # Construct a list of operators and extractors.
+            vlog("  listing operators")
             for i in 1:N
                 for j in 1:i
+                    vlog("    ($i,$j)  of ($N,$N)       $(length(xops)) ")
                     op₊ = 0.5 * (M[i,j] + M[j,i])
                     op₋ = 0.5im * (M[i,j] - M[j,i])
                     if independent(op₊, xops)
@@ -788,9 +848,11 @@ struct ScalarProgram <: ConvexProgram
             end
 
             # Construct a list of "untracked" operators.
-            for op in xops
+            vlog("  listing untracked operators")
+            for (k,op) in enumerate(xops)
+                vlog("    $k   of $(length(xops))")
                 dop = 1im * (H * op - op * H)
-                if independent(dop, xops ∪ yops)
+                if independent(dop, xops) && independent(dop, yops)
                     push!(yops, dop)
                 end
             end
@@ -799,9 +861,11 @@ struct ScalarProgram <: ConvexProgram
             Ny = length(yops)
 
             # Construct derivative matrices
+            vlog("  constructing derivative matrices")
             d = zeros(Float64, (Nx,Nx))
             d̃ = zeros(Float64, (Nx,Ny))
             for (i,op) in enumerate(xops)
+                vlog("    $i of $(length(xops))")
                 dop = 1im * (H * op - op * H)
                 v = zeros(ComplexF64, length(basis))
                 F = zeros(ComplexF64, (length(basis),Nx+Ny))
@@ -912,7 +976,7 @@ struct ScalarProgram <: ConvexProgram
             end
 
             # Spline coefficients
-            O = sgn * x^2
+            O = x^2
             λT = let
                 v = zeros(ComplexF64, length(basis))
                 F = zeros(ComplexF64, (length(basis),length(C)))
@@ -957,7 +1021,7 @@ function objective!(g, p::ScalarProgram, y::Vector{Float64})::Float64
     end
     # Boundary values
     for (k,C) in enumerate(p.C)
-        spline.c[1] = p.λT[k]
+        spline.c[1] = p.sgn * p.λT[k]
         spline.c[2:end] = y[1+o:2+p.K+o]
         at!(spline, p.T)
         r += spline.f * p.c0[k]
@@ -1004,7 +1068,7 @@ function Λ!(dΛ, p::ScalarProgram, y::Vector{Float64}, t::Float64)::Matrix{Comp
     end
     @views for (i,C) in enumerate(p.C)
         D = p.D[i]
-        spline.c[1] = p.λT[i]
+        spline.c[1] = p.sgn * p.λT[i]
         spline.c[2:end] .= y[1+o:2+p.K+o]
         at!(spline, p.T-t)
         Λ .+= spline.f .* D
@@ -1057,15 +1121,15 @@ function demo(::Val{:ScalarRT}, verbose)
     end
 
     #for (N,K) in Iterators.product([1,2],[4],[0,1])
-    for (N,K) in [(16,0),(7,0),(8,0)]
-        p0 = ScalarProgram(m, λ, 0.0, K, N, 1.0)
+    for (N,K) in [(26,0),(8,0)]
+        p0 = ScalarProgram(m, λ, 0.0, K, N, 1.0; verbose=verbose)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
         printstyled(stderr, "Derivatives: $(length(p0.C))\n", bold=true)
         printstyled(stderr, "Parameters: $(size(p0))\n", bold=true)
         for t in dt:dt:T
-            plo = ScalarProgram(m, λ, t, K, N, 1.0)
-            phi = ScalarProgram(m, λ, t, K, N, -1.0)
+            plo = ScalarProgram(p0, t, 1.0)
+            phi = ScalarProgram(p0, t, -1.0)
 
             lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
             hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
@@ -1078,461 +1142,6 @@ function demo(::Val{:ScalarRT}, verbose)
             flush(stdout)
         end
     end
-end
-
-struct HubbardRTProgram <: ConvexProgram
-    L::Int
-    T::Float64
-    K::Int
-    N::Int
-    A::Vector{Matrix{ComplexF64}}
-    C::Vector{Matrix{ComplexF64}}
-    D::Vector{Matrix{ComplexF64}}
-    c0::Vector{Float64}
-    λT::Vector{Float64}
-    sgn::Float64
-
-    function HubbardRTProgram(L, t, U, T, K, N, sgn)
-        # Construct algebra.
-        I,an,indices = let
-            I,ban,fan = WickAlgebra()
-            an = Matrix{WickOperator}(undef, (2,L))
-            indices = Dict{String,Tuple{Int,Int}}()
-            for s in 1:2, x in 1:L
-                name = "a[$s,$x]"
-                an[s,x] = fan(name)
-                indices[name] = (s,x)
-            end
-            I,an,indices
-        end
-        # Construct Hamiltonian.
-        H = let
-            H = 0*I
-            # Hopping
-            for s in 1:2, x in 1:L
-                x′ = mod1(x+1,L)
-                H += -t * (an[1,x]' * an[1,x′] + an[1,x′]' * an[1,x])
-            end
-            # Interaction
-            for x in 1:L
-                H += U * an[1,x]' * an[1,x] * an[2,x]' * an[2,x]
-            end
-            H
-        end
-        # List of generators
-        gens = let
-            gens = []
-            for s in 1:2, x in 1:L
-                push!(gens, an[s,x])
-                push!(gens, an[s,x]' * an[s,x])
-            end
-            gens
-        end
-        N = length(gens)
-        basis = []
-        for g in gens, g′ in gens
-            pr = g′' * g
-            dpr = 1im * (H * pr - pr * H)
-            for b in keys(pr.terms) ∪ keys(dpr.terms)
-                if abs(pr[b]) < 1e-10 && abs(dpr[b]) < 1e-10
-                    continue
-                end
-                if !(b in basis)
-                    push!(basis, b)
-                end
-            end
-        end
-        # Linearly independent Hermitian basis
-        hbasis = []
-        for bas in basis
-            b = Operator(bas)
-            o₊ = b + b'
-            o₋ = 1im * (b - b')
-            for o in (o₊,o₋)
-                for o′ in hbasis
-                    iprod::ComplexF64 = 0.
-                    nrm::Float64 = 0.
-                    for b in keys(o.terms) ∪ keys(o′.terms)
-                        iprod += conj(o[b]) * o′[b]
-                    end
-                    for b in keys(o′.terms)
-                        nrm += abs(o′.terms[b])^2
-                    end
-                    o = o - iprod*o′ / nrm
-                end
-                is0 = true
-                for (b,c) in o.terms
-                    if abs(c) > 1e-10
-                        is0 = false
-                    end
-                end
-                if !is0
-                    push!(hbasis, o)
-                end
-            end
-        end
-
-        # The matrix of operators
-        M = Matrix{WickOperator}(undef, length(gens), length(gens))
-        for (i,g) in enumerate(gens)
-            for (j,g′) in enumerate(gens)
-                M[i,j] = g' * g′
-            end
-        end
-
-        # Expectation values in the initial state
-        M0 = let
-            M0 = zeros(ComplexF64, (N,N))
-            for (i,g) in enumerate(gens)
-                for (j,g′) in enumerate(gens)
-                    op = g' * g′
-                    for (b,c) in op.terms
-                        m0::ComplexF64 = 1.0
-                        for (name,f) in b.f
-                            s,x = indices[name]
-                            if f.an != f.cr
-                                m0 = 0
-                            elseif x > 2
-                                if f.an
-                                    m0 = 0
-                                end
-                            end
-                        end
-                        M0[i,j] = c*m0
-                    end
-                end
-            end
-            M0
-        end
- 
-        # Degrees of freedom.
-        m′ = let
-            m = Dict{Wick, Matrix{ComplexF64}}()
-            for op in basis
-                mat = zeros(ComplexF64, (N,N))
-                for i in 1:length(gens), j in 1:length(gens)
-                    mat[i,j] += M[i,j][op]
-                end
-                m[op] = mat
-            end
-            m
-        end
-        # Hermitian basis for the degrees of freedom.
-        m = let
-            m = Matrix{ComplexF64}[]
-            for mat′ in values(m′)
-                # Hermitize
-                for mat in [0.5 * (mat′' + mat′), 0.5im * (mat′' - mat′)]
-                    # Orthogonalize
-                    for a in m
-                        mat -= a * tr(mat * a') / tr(a * a')
-                    end
-                    if sum(abs.(mat)) ≥ 1e-10
-                        push!(m, mat)
-                    end
-                end
-            end
-            m
-        end
-
-        # Algebraic identities
-        A = let
-            A = Matrix{ComplexF64}[]
-            for i in 1:(length(gens)^2-length(m))
-                # Generate random Hermitian matrix.
-                mat = randn(ComplexF64, (length(gens),length(gens)))
-                mat = mat + mat'
-                # Orthogonalize against A and m
-                for a in Iterators.flatten([A,values(m)])
-                    mat -= a * tr(mat * a') / tr(a * a')
-                end
-                # Normalize
-                mat = mat / sqrt(tr(mat' * mat))
-                push!(A, mat)
-            end
-
-            A
-        end
-
-        function ip(o′,o)::ComplexF64
-            r::ComplexF64 = 0
-            for b in keys(o.terms) ∪ keys(o′.terms)
-                r += conj(o′[b]) * o[b]
-            end
-            return r
-        end
-
-        function independent(o, l)::Bool
-            # First orthogonormalize l
-            l′ = []
-            for o′ in l
-                for o′′ in l′
-                    coef = ip(o′, o′′)
-                    o′ = o′ - conj(coef) * o′′
-                end
-                if real(ip(o′,o′)) > 1e-8
-                    o′ /= sqrt(ip(o′,o′))
-                    push!(l′, o′)
-                end
-            end
-            for o′ in l′
-                coef = ip(o, o′)
-                o = o - conj(coef) * o′
-            end
-            for b in keys(o.terms)
-                if abs(o[b]) > 1e-8
-                    return true
-                end
-            end
-            return false
-        end
-
-        # Equations of motion.
-        C,D,c0,λT = let
-            C = Matrix{ComplexF64}[]
-            D = Matrix{ComplexF64}[]
-            c0 = Float64[]
-            Cop = []
-            xops = []
-            yops = []
-            Es = []
-
-            # Construct a list of operators and extractors.
-            for i in 1:N
-                for j in 1:i
-                    op₊ = 0.5 * (M[i,j] + M[j,i])
-                    op₋ = 0.5im * (M[i,j] - M[j,i])
-                    if independent(op₊, xops)
-                        E = zeros(ComplexF64, (N,N))
-                        E[i,j] += 0.5
-                        E[j,i] += 0.5
-                        push!(xops, op₊)
-                        push!(Es, E)
-                    end
-                    if independent(op₋, xops)
-                        E = zeros(ComplexF64, (N,N))
-                        E[i,j] -= 0.5im
-                        E[j,i] += 0.5im
-                        push!(xops, op₋)
-                        push!(Es, E)
-                    end
-                end
-            end
-
-            # Construct a list of "untracked" operators.
-            for op in xops
-                dop = 1im * (H * op - op * H)
-                if independent(dop, xops ∪ yops)
-                    push!(yops, dop)
-                end
-            end
-
-            Nx = length(xops)
-            Ny = length(yops)
-
-            # Construct derivative matrices
-            d = zeros(Float64, (Nx,Nx))
-            d̃ = zeros(Float64, (Nx,Ny))
-            for (i,op) in enumerate(xops)
-                dop = 1im * (H * op - op * H)
-                v = zeros(ComplexF64, length(basis))
-                F = zeros(ComplexF64, (length(basis),Nx+Ny))
-                @assert keys(dop.terms) ⊆ basis
-                for (k,b) in enumerate(basis)
-                    v[k] = dop[b]
-                    for (k′,op′) in enumerate(xops)
-                        F[k,k′] = op′[b]
-                    end
-                    for (k′,op′) in enumerate(yops)
-                        F[k,Nx+k′] = op′[b]
-                    end
-                end
-                u = F \ v
-                @assert maximum(imag.(u)) < 1e-8
-
-                d[i,:] = real(u[1:Nx])
-                d̃[i,:] = real(u[Nx+1:Nx+Ny])
-            end
-
-            # Orthonormalize the columns of d̃.
-            d̃s = []
-            for i in 1:Ny
-                v = d̃[:,i]
-                for u in d̃s
-                    v = v - (v⋅u)*u
-                end
-                v /= sqrt(v⋅v)
-                push!(d̃s,v)
-            end
-
-            # Create an orthogonal set of degrees of freedom.
-            vs = []
-            for i in 1:Nx
-                v = randn(Float64, Nx)
-                # Orthogonalize against previous vectors.
-                for u in vs
-                    v = v - (v⋅u)*u
-                end
-
-                # Orthogonalize against columns of d̃.
-                for j in 1:Ny
-                    u = d̃s[j]
-                    v = v - (v⋅u)*u
-                end
-
-                # Normalize
-                if abs(v⋅v) ≤ 1e-8
-                    break
-                end
-                v /= sqrt(v⋅v)
-
-                push!(vs, v)
-            end
-
-            for (i,v) in enumerate(vs)
-                op = zero(Operator{Wick})
-                for (k,xop) in enumerate(xops)
-                    op += v[k] * xop
-                end
-                # Find Cmat
-                Cmat = let
-                    w = zeros(ComplexF64, length(basis))
-                    F = zeros(ComplexF64, (length(basis),Nx))
-                    for (k,b) in enumerate(basis)
-                        w[k] = op[b]
-                        for (k′,op′) in enumerate(xops)
-                            F[k,k′] = op′[b]
-                        end
-                    end
-                    u = F \ w
-                    mat = zeros(ComplexF64, (N,N))
-                    for j in 1:Nx
-                        mat += u[j] * Es[j]
-                    end
-                    mat
-                end
-
-                # Find Dmat
-                dop′ = 1im * (H*op - op*H)
-                dop = zero(Operator{Wick})
-                for (k,xop) in enumerate(xops)
-                    dop += (v' * d)[k] * xop
-                end
-                Dmat = let
-                    w = zeros(ComplexF64, length(basis))
-                    F = zeros(ComplexF64, (length(basis),Nx))
-                    for (k,b) in enumerate(basis)
-                        w[k] = dop[b]
-                        for (k′,op′) in enumerate(xops)
-                            F[k,k′] = op′[b]
-                        end
-                    end
-                    u = F \ w
-                    mat = zeros(ComplexF64, (N,N))
-                    for j in 1:Nx
-                        mat += u[j] * Es[j]
-                    end
-                    mat
-                end
-
-                # Add derivative relation
-                push!(Cop, op)
-                push!(C, Cmat)
-                push!(D, Dmat)
-                # Add initial value
-                push!(c0, real(tr(Cmat * M0)))
-            end
-
-            # Spline coefficients
-            x̂ = 0*I
-            for s in 1:2, x in 1:L
-                x̂ += cos(2*π*x/L) * an[s,x]' * an[s,x]
-            end
-            O = sgn * x
-            λT = let
-                v = zeros(ComplexF64, length(basis))
-                F = zeros(ComplexF64, (length(basis),length(C)))
-                for (k,b) in enumerate(basis)
-                    v[k] = O[b]
-                    for (k′,op) in enumerate(Cop)
-                        F[k,k′] = op[b]
-                    end
-                end
-                u = F \ v
-                ur = real.(u)
-                ui = imag.(u)
-                @assert maximum(abs.(ui)) < 1e-8
-                ur
-            end
-
-            C,D,c0,λT
-        end
-
-        new(L, T, K, N, A, C, D, c0, λT, sgn)
-    end
-end
-
-function size(p::HubbardRTProgram)::Int
-    return 3
-end
-
-function initial(p::HubbardRTProgram)::Vector{Float64}
-    return rand(Float64, size(p))
-end
-
-function objective!(g, p::HubbardRTProgram, y::Vector{Float64})::Float64
-end
-
-function constraints!(cb, p::HubbardRTProgram, y::Vector{Float64})
-end
-
-function demo(::Val{:HubbardRT}, verbose)
-    # Parameters
-    L = 3
-    t = 0.5
-    U = 1.0
-    dt = 1e-1
-    T = 10.0
-
-    # Exact result
-    fhc = CONCAVE.Hamiltonians.FermiHubbardChain(L, t, U)
-    ham = CONCAVE.Hamiltonians.Hamiltonian(fhc)
-    #ψ₀ = CONCAVE.Hamiltonians.build_state(fhc) do nu,nd
-    #    return 1.
-    #end
-    ψ₀ = CONCAVE.Hamiltonians.basis_state(fhc) do s,x
-        return x ≤ 2
-    end
-    ψ = copy(ψ₀)
-    Û = CONCAVE.Hamiltonians.evolution(ham, dt)
-    for t in 0.0:dt:T
-        ex = real(ψ' * ham.op["x"] * ψ)
-        println("$t -1 -1 $ex $ex")
-        ψ = Û*ψ
-    end
-
-    for (N,K) in [(1,0)]
-        p0 = HubbardRTProgram(L, t, U, 0.0, K, N, 1.0)
-        printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
-        printstyled(stderr, "Derivatives: $(length(p0.C))\n", bold=true)
-        printstyled(stderr, "Parameters: $(size(p0))\n", bold=true)
-
-        for T′ in dt:dt:T
-            plo = HubbardRTProgram(L, t, U, T′, K, N, 1.0)
-            phi = HubbardRTProgram(L, t, U, T′, K, N, -1.0)
-
-            lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
-            hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
-
-            if -lo > hi
-                println(stderr, "WARNING: primal proved infeasible")
-            end
-
-            println("$T′ $N $K $(-lo) $hi")
-        end
-        flush(stdout)
-    end
-
 end
 
 function demo(::Val{:Neutrons}, verbose)
