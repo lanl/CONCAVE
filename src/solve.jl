@@ -1145,6 +1145,41 @@ function demo(::Val{:ScalarRT}, verbose)
     end
 end
 
+function demo(::Val{:ScalarRTBig}, verbose)
+    # Parameters
+    N = 4
+    dt = 5e-1
+    T = 2.5
+    #T = 0.5
+    m = 1.0
+    λ = 0.5
+
+    N = 26
+    for K in 3:6
+        p0 = ScalarProgram(m, λ, 0.0, K, N, 1.0; verbose=verbose)
+        printstyled(stderr, "N = $N; K = $K\n", bold=true)
+        printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
+        printstyled(stderr, "Derivatives: $(length(p0.C))\n", bold=true)
+        printstyled(stderr, "Parameters: $(size(p0))\n", bold=true)
+        for t in dt:dt:T
+            plo = ScalarProgram(p0, t, 1.0)
+            phi = ScalarProgram(p0, t, -1.0)
+
+            lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
+            hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
+
+            if -lo > hi
+                println(stderr, "WARNING: primal proved infeasible")
+            end
+
+            println("$t $N $K $(-lo) $hi")
+            flush(stdout)
+        end
+    end
+end
+
+
+
 function demo(::Val{:Neutrons}, verbose)
     # Parameters.
 
