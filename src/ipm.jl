@@ -134,7 +134,7 @@ function initial(p::Phase1)::Vector{Float64}
     y′ = initial(p.cp)
     y = zeros(Float64, 1+length(y′))
     y[2:end] .= y′
-    constraints!(p.cp, y′) do f,g
+    constraints!(p.cp, y′) do f,_grad,_hess
         if f isa Real
             if y[1] + f < 0
                 y[1] = -f + 1.0
@@ -160,7 +160,9 @@ end
 function constraints!(cb, p::Phase1, y::Vector{Float64})
     N = length(y)-1
     s = y[1]
-    function fn(M::Matrix, D)
+    function fn(M::Matrix, D, H)
+        @assert H == 0
+        # TODO should pass a matrix into cb(), really.
         F = eigen(Hermitian(M))
         f = F.values[1]
         v = F.vectors[:,1]
@@ -172,7 +174,8 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
         cb(s+f, g′)
     end
 
-    function fn(f::Real, d)
+    function fn(f::Real, d, h)
+        @assert h == 0
         g = zeros(Float64, length(d)+1)
         g[1] = 1.
         for n in 1:N
@@ -182,6 +185,29 @@ function constraints!(cb, p::Phase1, y::Vector{Float64})
     end
 
     constraints!(fn, p.cp, y[2:end])
+end
+
+function feasible_initial_new(prog::ConvexProgram; verbose::Bool=false)::Vector{Float64}
+    if verbose
+        println(stderr, "Finding feasible initial point...")
+    end
+
+    # Construct phase-1 problem.
+    p1 = Phase1(prog)
+    y = initial(p1)
+    # TODO calculate t₀
+    solve(p1, y) do obj
+        return obj < 0
+    end
+    y′ = y[2:end]
+
+    # TODO return t₀
+
+    if !feasible(prog, y′)
+        error("No (strictly) feasible point found.")
+    end
+
+    return y′
 end
 
 function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Float64}
@@ -225,60 +251,13 @@ function feasible_initial(prog::ConvexProgram; verbose::Bool=false)::Vector{Floa
     return y
 end
 
-function solve_bfgs(prog::ConvexProgram, y; verbose::Bool=false, early=nothing)::Tuple{Float64, Vector{Float64}}
-    if !feasible(prog, y)
-        error("Initial point was not (strictly) feasible")
-    end
+# TODO allow t₀ in solver
 
-    N = length(y)
-    g = zero(y)
-
-    μ = 2
-    ϵ = 1e-10
-    t₀ = 1.0e-6
-
-    t = t₀
-    H = zeros(Float64, (N,N))
-    H += I
-    while t < 1/ϵ
-        # Center.
-        v = minimize!(BFGS, y; H0=H) do g, y
-            if any(isnan.(y)) || any(isinf.(y))
-                return Inf
-            end
-            if isnothing(g)
-                gobj, gbar = nothing, nothing
-            else
-                gobj, gbar = zero(g), zero(g)
-            end
-            obj = objective!(gobj, prog, y)
-            bar = barrier!(gbar, nothing, prog, y)
-            r = obj + bar/t
-            if !isnothing(g)
-                for n in 1:N
-                    g[n] = gobj[n] + gbar[n]/t
-                end
-            end
-            return r
-        end
-        obj = objective!(g, prog, y)
-        if verbose
-            println(stderr, t, " ", v, "   ", obj)
-        end
-        if !isnothing(early)
-            if early(y)
-                break
-            end
-        end
-        t = μ*t
-        H += 1e-6 * maximum(eigvals(Hermitian(H))) * I
-        #H .*= μ  # This does not help.
-    end
-
-    return objective!(g, prog, y), y
+function solve(term::Function, prog::ConvexProgram, y)
+    return solve(prog, y; term=term)
 end
 
-function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vector{Float64}}
+function solve(prog::ConvexProgram, y; verbose::Bool=false, term=nothing)::Tuple{Float64, Vector{Float64}}
     if !feasible(prog, y)
         error("Initial point was not (strictly) feasible")
     end
@@ -288,7 +267,7 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
 
     μ = 2
     ϵ = 1e-10
-    t₀ = 1.0e-2
+    t₀ = 1.0e-4
 
     t = t₀
     while t < 1/ϵ
@@ -302,10 +281,17 @@ function solve(prog::ConvexProgram, y; verbose::Bool=false)::Tuple{Float64, Vect
             bar = barrier!(gbar, h, prog, y)
             r = obj + bar/t
             @. g = gobj + gbar/t
-            h ./= t
+            if !isnothing(h)
+                h ./= t
+            end
             return r
         end
         obj = objective!(g, prog, y)
+        if !isnothing(term)
+            if term(obj)
+                return obj, y
+            end
+        end
         if verbose
             println(stderr, t, " ", v, "   ", obj)
         end

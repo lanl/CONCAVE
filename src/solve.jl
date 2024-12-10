@@ -1148,20 +1148,19 @@ end
 function demo(::Val{:ScalarRTBig}, verbose)
     # Parameters
     N = 4
-    dt = 5e-1
     T = 2.5
     #T = 0.5
     m = 1.0
     λ = 0.5
 
     N = 26
-    for K in 3:6
+    for K in [0,3,5]
         p0 = ScalarProgram(m, λ, 0.0, K, N, 1.0; verbose=verbose)
         printstyled(stderr, "N = $N; K = $K\n", bold=true)
         printstyled(stderr, "Algebraic constraints: $(length(p0.A))\n", bold=true)
         printstyled(stderr, "Derivatives: $(length(p0.C))\n", bold=true)
         printstyled(stderr, "Parameters: $(size(p0))\n", bold=true)
-        for t in dt:dt:T
+        for t in [0.75,1.25,1.75]
             plo = ScalarProgram(p0, t, 1.0)
             phi = ScalarProgram(p0, t, -1.0)
 

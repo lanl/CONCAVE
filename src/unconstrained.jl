@@ -230,11 +230,11 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
         α = 1.0
         m = g ⋅ dy
         @. y′ = y + α * dy
-        v′ = f!(g, h, y′)
+        v′ = f!(g, nothing, y′)
         while v′ > v + 0.5 * α * m && α > 1e-30
             α *= 0.5
             @. y′ = y + α * dy
-            v′ = f!(g, h, y′)
+            v′ = f!(g, nothing, y′)
         end
         v = v′
         @. y = y′
@@ -242,6 +242,9 @@ function (newton::Newton)(f!, y::Vector{Float64})::Float64
         if α < 1e-30
             break
         end
+
+        # Compute hessian.
+        f!(g, h, y)
 
         nsteps += 1
     end
