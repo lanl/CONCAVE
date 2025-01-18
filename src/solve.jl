@@ -1177,14 +1177,37 @@ function demo(::Val{:ScalarRTBig}, verbose)
     end
 end
 
+struct NeutronProgram
+    function NeutronProgram()
+    end
+end
 
+function size(p::NeutronProgram)::Int
+    # TODO
+    return 0
+end
+
+function initial(p::NeutronProgram)::Vector{Float64}
+    return rand(Float64, size(p))
+end
+
+function objective!(g, p::NeutronProgram, y::Vector{Float64})::Float64
+    # TODO
+    return 0
+end
+
+function objective!(g, h, p::NeutronProgram, y::Vector{Float64})::Float64
+    if !isnothing(h)
+        h .= 0.0
+    end
+    return objective!(g, p, y)
+end
+
+function constraints!(cb, p::NeutronProgram, y::Vector{Float64})
+    # TODO
+end
 
 function demo(::Val{:Neutrons}, verbose)
-    # Parameters.
-
-    # Construct operators.
-
-    # Build the Hamiltonian.
 end
 
 function demo(::Val{:Thermo}, verbose)
