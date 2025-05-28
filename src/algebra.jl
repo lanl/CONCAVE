@@ -1,605 +1,768 @@
+#!/usr/bin/env julia
+
 #=
-Algebras to implement:
-* Majorana
-* Dirac
-* Pauli
-* Oscillator
+USAGE
+
+In principle, an algebra is defined by specifying a finite number of
+generators, and rules for their commutation (and possibly conjugation).
+
+The principle is fairly abstract; the practice is less abstract. Each mode may
+be labelled with something resembling a type, which is typically one of
+{pauli,bose,dirac,majorana}. The commutation and conjugation rules are
+determined by that type.
+
+With that in mind, the notation to construct an algebra is:
+
+    @algebra Name begin
+        I::Identity
+        σ::Pauli[5]
+        γ::Majorana[3]
+        a::Dirac
+        c::Bose
+    end
+
+Hopefully this is self-explanatory. After this, algebraic manipulations may be
+performed in the obvious way:
+my_product = σ[2] * σ[4] + 0.3*γ
+
 =#
 
-module Algebras
+#=
+DESIGN NOTES
+
+Holding the API fixed (which already makes a couple usability compromises for
+the sake of efficiency), the next requirement is speed and scalability.
+=#
+
+#=
+TODO
+
+ * More comprehensive tests
+
+ * Type information in BasisOperator?
+
+ * Automatic trimming of vanishing coefficients
+
+=#
 
 import Base: +,-,*,/,^,adjoint
 import Base: zero, one, isone
-import Base: copy, hash, ==, isapprox, isless, show
-import Base: setindex!, getindex, in
+import Base: copy, hash, isequal, isapprox, isless, show
+import Base: setindex!, getindex, in, iterate
 
-export Operator
-export Majorana, MajoranaAlgebra, MajoranaOperator
-export Pauli, PauliAlgebra, PauliOperator
-export Fermion, FermionAlgebra, FermionOperator
-export Boson, BosonAlgebra, BosonOperator
-export Spins, SpinAlgebra, SpinOperator
-export Wick, WickAlgebra, WickOperator
+using Random
 
-export add!,scale!
-
-abstract type Basis end
-
-struct Operator{B<:Basis}
-    terms::Dict{B,ComplexF64}
+abstract type Mode
 end
 
-function Operator{B}() where {B<:Basis}
-    Operator{B}(Dict{B,ComplexF64}())
+@enum Pauli σI σX σY σZ
+
+struct PauliMode <: Mode
+    pauli::Pauli
 end
 
-function Operator{B}(b::B) where {B<:Basis}
-    Operator{B}(Dict{B,ComplexF64}(b => one(ComplexF64)))
+struct DiracMode <: Mode
+    cr::Bool
+    an::Bool
 end
 
-function Operator(b::B) where {B<:Basis}
-    Operator{B}(b)
+struct MajoranaMode <: Mode
+    n::Bool
 end
 
-function ==(a::Operator{B}, b::Operator{B})::Bool where {B}
-    return a.terms == b.terms
+struct BoseMode <: Mode
+    cr::Int
+    an::Int
 end
 
-function isapprox(a::Operator{B}, b::Operator{B})::Bool where {B}
-    for op in keys(a.terms) ∪ keys(b.terms)
-        if !isapprox(a[op], b[op], atol=1e-12)
+one(::Type{PauliMode}) = PauliMode(σI)
+one(::Type{DiracMode}) = DiracMode(0,0)
+one(::Type{MajoranaMode}) = MajoranaMode(false)
+one(::Type{BoseMode}) = BoseMode(0,0)
+
+function show(io::IO, m::PauliMode)
+    print(io, m.pauli)
+end
+
+function show(io::IO, m::DiracMode)
+    if !(m.cr || m.an)
+        print(io, "1")
+    end
+    if m.cr
+        print(io, "a⁺")
+    end
+    if m.an
+        print(io, "a")
+    end
+end
+
+function show(io::IO, m::MajoranaMode)
+    if m.n
+        print(io, "γ")
+    else
+        print(io, "1")
+    end
+end
+
+function show(io::IO, m::BoseMode)
+    if m.cr == 0 && m.an == 0
+        print(io, "1")
+        return
+    end
+    for i in 1:m.cr
+        print(io, "c⁺")
+    end
+    for i in 1:m.an
+        print(io, "c")
+    end
+end
+
+struct BasisOperator
+    paulis::Vector{PauliMode}
+    diracs::Vector{DiracMode}
+    majoranas::Vector{MajoranaMode}
+    boses::Vector{BoseMode}
+
+    function BasisOperator(npauli::Int, ndirac::Int, nmajorana::Int, nbose::Int)
+        paulis = [one(PauliMode) for k in 1:npauli]
+        diracs = [one(DiracMode) for k in 1:ndirac]
+        majoranas = [one(MajoranaMode) for k in 1:nmajorana]
+        boses = [one(BoseMode) for k in 1:nbose]
+        new(paulis,diracs,majoranas,boses)
+    end
+end
+
+function copy(o::BasisOperator)
+    r = BasisOperator(length(o.paulis), length(o.diracs), length(o.majoranas), length(o.boses))
+    for k in 1:length(o.paulis)
+        r.paulis[k] = o.paulis[k]
+    end
+    for k in 1:length(o.diracs)
+        r.diracs[k] = o.diracs[k]
+    end
+    for k in 1:length(o.majoranas)
+        r.majoranas[k] = o.majoranas[k]
+    end
+    for k in 1:length(o.boses)
+        r.boses[k] = o.boses[k]
+    end
+    return r
+end
+
+function isequal(a::BasisOperator, b::BasisOperator)::Bool
+    if length(a.paulis) != length(b.paulis)
+        return false
+    end
+    if length(a.diracs) != length(b.diracs)
+        return false
+    end
+    if length(a.majoranas) != length(b.majoranas)
+        return false
+    end
+    if length(a.boses) != length(b.boses)
+        return false
+    end
+    for (ma,mb) in zip(a.paulis,b.paulis)
+        if ma != mb
+            return false
+        end
+    end
+    for (ma,mb) in zip(a.diracs,b.diracs)
+        if ma != mb
+            return false
+        end
+    end
+    for (ma,mb) in zip(a.majoranas,b.majoranas)
+        if ma != mb
+            return false
+        end
+    end
+    for (ma,mb) in zip(a.boses,b.boses)
+        if ma != mb
             return false
         end
     end
     return true
 end
 
-function hash(a::Operator{B}, h::UInt)::UInt where {B}
-    return hash(a.terms, h)
+function hash(a::BasisOperator, h::UInt=0x012456789)::UInt
+    for m ∈ a.paulis
+        h = hash(m, h)
+    end
+    for m ∈ a.diracs
+        h = hash(m, h)
+    end
+    for m ∈ a.majoranas
+        h = hash(m, h)
+    end
+    for m ∈ a.boses
+        h = hash(m, h)
+    end
+    return h
 end
 
-function copy(a::Operator{B})::Operator{B} where {B}
-    return Operator(copy(a.terms))
+struct Operator
+    terms::Dict{BasisOperator,ComplexF64}
+
+    function Operator()
+        return new(Dict{BasisOperator,ComplexF64}())
+    end
+
+    function Operator(b::BasisOperator)
+        return new(Dict{BasisOperator,ComplexF64}(b => 1.0))
+    end
 end
 
-function getindex(a::Operator{B}, b::B)::ComplexF64 where {B}
-    if b in keys(a.terms)
+function show(io::IO, op::Operator)
+    beginning = true
+    for (b,c) ∈ op
+        if !beginning
+            print("+")
+        end
+        print("($c) * {$b}")
+        beginning = false
+    end
+end
+
+function copy(a::Operator)
+    r = Operator()
+    for (b,c) ∈ a
+        r[b] = c
+    end
+    return r
+end
+
+function isapprox(a::Operator, b::Operator)
+    for (x,c) ∈ a
+        if !(b[x] ≈ c)
+            return false
+        end
+    end
+    for (x,c) ∈ b
+        if !(a[x] ≈ c)
+            return false
+        end
+    end
+    return true
+end
+
+function add!(a::Operator, b::Operator, c::T=1) where {T <: Number}
+    for (term,coef) ∈ b
+        a[term] = a[term] + c*coef
+    end
+end
+
+function scale!(a::Operator, c::ComplexF64)
+    for (term,coef) ∈ a
+        a[term] = c*coef
+    end
+end
+
+function +(a::Operator, b::Operator)
+    r = copy(a)
+    add!(r, b)
+    return r
+end
+
+function -(a::Operator, b::Operator)
+    r = copy(a)
+    add!(r, b, -1)
+    return r
+end
+
+function *(op1::Operator, op2::Operator)::Operator
+    r = Operator()
+    for (b1,c1) in op1, (b2,c2) in op2
+        bmul(b1,b2) do b,c
+            r[b] += c1*c2*c
+        end
+    end
+    return r
+end
+
+function *(c::T, op::Operator)::Operator where {T <: Number}
+    r = copy(op)
+    for (b,c′) in op
+        r[b] = c*c′
+    end
+    return r
+end
+
+function -(op::Operator)::Operator
+    return -1 * op
+end
+
+function adjoint(op::Operator)::Operator
+    r = Operator()
+    for (b,c) in op
+        badjoint(b) do b′,c′
+            r[b′] += c*c′
+        end
+    end
+    return r
+end
+
+function getindex(a::Operator, b::BasisOperator)::ComplexF64
+    if b in a
         return a.terms[b]
     else
         return zero(ComplexF64)
     end
 end
 
-function setindex!(a::Operator{B}, c::ComplexF64, b::B)::ComplexF64 where {B}
-    a.terms[b] = c
-    return c
+function setindex!(a::Operator, c::ComplexF64, b::BasisOperator)::ComplexF64
+    return a.terms[b] = c
 end
 
-function in(b::B, a::Operator{B})::Bool where {B}
+function iterate(a::Operator)
+    iterate(a.terms)
+end
+
+function iterate(a::Operator, i)
+    iterate(a.terms, i)
+end
+
+function in(b::BasisOperator, a::Operator)::Bool
     return b in keys(a.terms)
 end
 
-function zero(::Type{Operator{B}})::Operator{B} where {B}
-    return Operator{B}()
+function zero(::Type{Operator})::Operator
+    return Operator()
 end
 
-function zero(::Operator{B}) where {B}
-    zero(Operator{B})
+function zero(::Operator)::Operator
+    zero(Operator)
 end
 
-function one(::Type{Operator{B}})::Operator{B} where {B}
-    return Operator(one(B))
+function isfermion(p::PauliMode)
+    return false
 end
 
-function add!(a::Operator{B}, b::Operator{B}, c::ComplexF64=one(ComplexF64))::Operator{B} where {B}
-    for op in keys(b.terms)
-        if !(op in keys(a.terms))
-            a.terms[op] = 0.0
+function isfermion(d::DiracMode)
+    return d.cr ⊻ d.an
+end
+
+function isfermion(m::MajoranaMode)
+    return m.n
+end
+
+function isfermion(b::BoseMode)
+    return false
+end
+
+function isfermion(b::BasisOperator)
+    f = false
+    for d in a.diracs
+        f ⊻= isfermion(d)
+    end
+    for m in a.majoranas
+        f ⊻= isfermion(m)
+    end
+    return f
+end
+
+function mmul(cb, a::PauliMode, b::PauliMode)
+    if a.pauli == σI
+        cb(PauliMode(b.pauli), 1.0)
+    elseif b.pauli == σI
+        cb(PauliMode(a.pauli), 1.0)
+    elseif a.pauli == b.pauli
+        cb(PauliMode(σI), 1.0)
+    elseif a.pauli == σX && b.pauli == σY
+        cb(PauliMode(σZ), 1.0im)
+    elseif a.pauli == σY && b.pauli == σZ
+        cb(PauliMode(σX), 1.0im)
+    elseif a.pauli == σZ && b.pauli == σX
+        cb(PauliMode(σY), 1.0im)
+    elseif b.pauli == σX && a.pauli == σY
+        cb(PauliMode(σZ), -1.0im)
+    elseif b.pauli == σY && a.pauli == σZ
+        cb(PauliMode(σX), -1.0im)
+    elseif b.pauli == σZ && a.pauli == σX
+        cb(PauliMode(σY), -1.0im)
+    end
+end
+
+function mmul(cb, a::DiracMode, b::DiracMode)
+    if a.an == false
+        if a.cr && b.cr
+            return
         end
-        a.terms[op] = a.terms[op] + c*b.terms[op]
+        cb(DiracMode(a.cr | b.cr, b.an), 1.0)
+        return
     end
-    return a
-end
-
-function scale!(a::Operator{B}, c::ComplexF64) where {B}
-    for op in keys(a.terms)
-        a[op] = c*a[op]
-    end
-end
-
-function +(a::Operator{B}, b::Operator{B})::Operator{B} where {B}
-    r = zero(Operator{B})
-    add!(r, a)
-    add!(r, b)
-    return r
-end
-
-function -(a::Operator{B})::Operator{B} where {B}
-    r = copy(a)
-    for op in keys(r.terms)
-        r[op] = -r[op]
-    end
-    return r
-end
-
-function -(a::Operator{B}, b::Operator{B})::Operator{B} where {B}
-    return a + (-b)
-end
-
-function *(a::Operator{B}, b::Operator{B})::Operator{B} where {B}
-    r = zero(Operator{B})
-    for a′ in keys(a.terms)
-        for b′ in keys(b.terms)
-            #r += a[a′]*b[b′] * (a′*b′)
-            add!(r, a′*b′, a[a′]*b[b′])
+    if b.cr == false
+        if a.an && b.an
+            return
         end
+        cb(DiracMode(a.cr, a.an | b.an), 1.0)
+        return
     end
-    return r
-end
-
-function *(c, a::Operator{B})::Operator{B} where {B}
-    r = copy(a)
-    for op in keys(r.terms)
-        r[op] = c*r[op]
-    end
-    return r
-end
-
-function *(a::Operator{B}, c::ComplexF64)::Operator{B} where {B}
-    return c*a
-end
-
-function /(a::Operator, c)
-    return (1/c)*a
-end
-
-function ^(a::Operator{B}, n::Int)::Operator{B} where {B}
-    if n == 0
-        return one(Operator{B})
-    elseif n == 1
-        return a
-    else
-        return a * (a^(n-1))
+    # a adag = 1 - adag a
+    cb(DiracMode(a.cr, b.an), 1.0)
+    if !a.cr && !b.an
+        cb(DiracMode(true, true), -1.0)
     end
 end
 
-function adjoint(a::Operator{B})::Operator{B} where {B}
-    r = zero(Operator{B})
-    for op in keys(a.terms)
-        r = r+adjoint(a[op])*adjoint(op)
+function mmul(cb, a::MajoranaMode, b::MajoranaMode)
+    if a.n && b.n
+        return
     end
-    return r
+    cb(MajoranaMode(a.n | b.n), 1.0)
 end
 
-function trim(op::Operator{B})::Operator{B} where {B}
-    r = zero(Operator{B})
-    for (b,c) in op.terms
-        if abs(c) > 1e-10
-            r.terms[b] = c
-        end
-    end
-    return r
-end
-
-function show(io::IO, ::MIME"text/plain", op::Operator{B}) where {B}
-    op = trim(op)
-    if isempty(op.terms)
-        println(io, " 0")
-    end
-    for (b,c) in op.terms
-        print(io, "  + ")
-        print(io, c)
-        print(io, " ")
-        print(io, b)
-        println(io)
-    end
-end
-
-struct Majorana <: Basis
-    γ::Bool
-end
-
-MajoranaOperator = Operator{Majorana}
-
-function MajoranaAlgebra()
-    return Operator(Majorana(false)), Operator(Majorana(true))
-end
-
-function ==(γ1::Majorana, γ2::Majorana)::Bool
-    return γ1.γ == γ2.γ
-end
-
-function hash(γ::Majorana, h::UInt)::UInt
-    return hash(γ.γ, h)
-end
-
-function copy(γ::Majorana)::Majorana
-    return Majorana(γ.γ)
-end
-
-function one(::Type{Majorana})::Majorana
-    return Majorana(false)
-end
-
-function isone(γ::Majorana)::Bool
-    return γ.γ == false
-end
-
-function adjoint(γ::Majorana)::MajoranaOperator
-    return Operator(γ)
-end
-
-function *(γ1::Majorana, γ2::Majorana)::MajoranaOperator
-    return Operator(Majorana(γ1.γ ⊻ γ2.γ))
-end
-
-struct Pauli <: Basis
-    p::Char
-end
-
-PauliOperator = Operator{Pauli}
-
-function PauliAlgebra()
-    return Operator(Pauli('I')), Operator(Pauli('X')), Operator(Pauli('Y')), Operator(Pauli('Z'))
-end
-
-function ==(a::Pauli, b::Pauli)
-    return a.p == b.p
-end
-
-function hash(a::Pauli, h::UInt)::UInt
-    return hash(a.p, h)
-end
-
-function copy(a::Pauli)::Pauli
-    return Pauli(a.p)
-end
-
-function one(::Type{Pauli})
-    return Pauli('I')
-end
-
-function isone(a::Pauli)::Bool
-    return a.p == 'I'
-end
-
-function adjoint(a::Pauli)::PauliOperator
-    return Operator(a)
-end
-
-function *(a::Pauli, b::Pauli)::PauliOperator
-    if a.p == 'I'
-        return Operator(b)
-    elseif b.p == 'I'
-        return Operator(a)
-    end
-    if a.p == b.p
-        return Operator(Pauli('I'))
-    end
-    if a.p == 'X' && b.p == 'Y'
-        return 1im * Operator(Pauli('Z'))
-    elseif a.p == 'Y' && b.p == 'Z'
-        return 1im * Operator(Pauli('X'))
-    elseif a.p == 'Z' && b.p == 'X'
-        return 1im * Operator(Pauli('Y'))
-    end
-    if a.p == 'Y' && b.p == 'X'
-        return -1im * Operator(Pauli('Z'))
-    elseif a.p == 'Z' && b.p == 'Y'
-        return -1im * Operator(Pauli('X'))
-    elseif a.p == 'X' && b.p == 'Z'
-        return -1im * Operator(Pauli('Y'))
-    end
-end
-
-struct Fermion <: Basis
-    cr::Bool
-    an::Bool
-end
-
-FermionOperator = Operator{Fermion}
-
-function FermionAlgebra()
-    return Operator(Fermion(false,false)), Operator(Fermion(false,true))
-end
-
-function ==(a::Fermion, b::Fermion)
-    return a.cr == b.cr && a.an == b.an
-end
-
-function hash(a::Fermion, h::UInt)
-    return hash((a.cr, a.an), h)
-end
-
-function copy(a::Fermion)::Fermion
-    return Fermion(a.cr, a.an)
-end
-
-function one(::Type{Fermion})
-    return Fermion(0,0)
-end
-
-function isone(a::Fermion)::Bool
-    return a.an == false && a.cr == false
-end
-
-function adjoint(a::Fermion)::FermionOperator
-    return Operator(Fermion(a.an, a.cr))
-end
-
-function *(a::Fermion, b::Fermion)::FermionOperator
-    if a.an == false || b.cr == false
-        if (a.an && b.an) || (a.cr && b.cr)
-            return zero(FermionOperator)
-        end
-        cr = a.cr || b.cr
-        an = a.an || b.an
-        return Operator(Fermion(cr,an))
-    elseif a.cr == false && b.an == false
-        return one(FermionOperator) - Operator(Fermion(true,true))
-    else
-        return Operator(Fermion(a.cr,b.an))
-    end
-end
-
-function isfermionic(a::Fermion)::Bool
-    return a.cr ⊻ a.an
-end
-
-struct Boson <: Basis
-    cr::Int
-    an::Int
-end
-
-BosonOperator = Operator{Boson}
-
-function BosonAlgebra()
-    return Operator(Boson(0,0)), Operator(Boson(0,1))
-end
-
-function ==(a::Boson, b::Boson)
-    return a.cr == b.cr && a.an == b.an
-end
-
-function hash(a::Boson, h::UInt)
-    return hash((a.cr, a.an), h)
-end
-
-function copy(a::Boson)::Boson
-    return Boson(a.cr, a.an)
-end
-
-function one(::Type{Boson})
-    return Boson(0,0)
-end
-
-function isone(a::Boson)::Bool
-    return a.cr == 0 && a.an == 0
-end
-
-function adjoint(a::Boson)::BosonOperator
-    return Operator(Boson(a.an, a.cr))
-end
-
-function bprod(cb, β::Int, γ::Int)
-    m::Int = min(β,γ)
-    M::Int = max(β,γ)
-    for i in 0:m
-        cb(binomial(m,i) * factorial(M) / factorial(M-i), β-i,γ-i)
-    end
-end
-
-function *(a::Boson, b::Boson)::BosonOperator
-    r = Operator{Boson}()
-    all = @allocations bprod(a.an,b.cr) do c, β′, γ′
-        r.terms[Boson(a.cr+γ′,b.an+β′)] = c
-    end
-    return r
-    # Base case:
+function mmul(cb, a::BoseMode, b::BoseMode)
     if a.an == 0
-        return Operator(Boson(a.cr+b.cr,b.an))
+        cb(BoseMode(a.cr+b.cr,b.an), 1.0)
+        return
     end
     if b.cr == 0
-        return Operator(Boson(a.cr,a.an+b.an))
+        cb(BoseMode(a.cr,a.an+b.an), 1.0)
+        return
     end
-    # Recurse
-    opl = Operator(Boson(a.cr, a.an-1))
-    opr = Operator(Boson(b.cr-1, b.an))
-    return opl*opr + opl*Operator(Boson(1,1))*opr
-end
-
-struct Spin <: Basis
-    m::Dict{String,Pauli}
-end
-
-SpinOperator = Operator{Spin}
-
-function SpinAlgebra()
-    function X(n::String)::Spin
-        r = one(Spin)
-        r.m[n] = Pauli('X')
-        return SpinOperator(r)
+    # Commute one of b.cr through.
+    # (c^k) c⁺ = c⁺ c^k + k c^{k-1}
+    k = a.an
+    mmul(cb, BoseMode(a.cr+1, a.an), BoseMode(b.cr-1, b.an))
+    mmul(BoseMode(a.cr, a.an-1), BoseMode(b.cr-1, b.an)) do m, coef
+        cb(m, coef*k)
     end
-    function Y(n::String)::Spin
-        r = one(Spin)
-        r.m[n] = Pauli('Y')
-        return SpinOperator(r)
-    end
-    function Z(n::String)::Spin
-        r = one(Spin)
-        r.m[n] = Pauli('Z')
-        return SpinOperator(r)
-    end
-    return Spin(Dict{String,Pauli}()), X, Y, Z
 end
 
-function ==(a::Spin, b::Spin)
-    return a.m == b.m
-end
-
-function hash(a::Spin, h::UInt)::UInt
-    return hash(a.m, h)
-end
-
-function copy(a::Spin)::Spin
-    return Spin(copy(a.m))
-end
-
-function one(::Type{Spin})::Spin
-    return Spin(Dict{String,Pauli}())
-end
-
-function isone(a::Spin)::Bool
-    return isempty(a.m)
-end
-
-function adjoint(a::Spin)::SpinOperator
-    # TODO
-end
-
-function *(a::Spin, b::Spin)::SpinOperator
-    # TODO
-end
-
-struct Wick <: Basis
-    b::Dict{String,Boson}
-    f::Dict{String,Fermion}
-end
-
-WickOperator = Operator{Wick}
-
-function WickAlgebra()
-    I = WickOperator(one(Wick))
-
-    function fan(n::String)::WickOperator
-        r = one(Wick)
-        r.f[n] = Fermion(false,true)
-        return WickOperator(r)
-    end
-
-    function ban(n::String)::WickOperator
-        r = one(Wick)
-        r.b[n] = Boson(0,1)
-        return WickOperator(r)
-    end
-
-    return I, ban, fan
-end
-
-function ==(a::Wick, b::Wick)
-    return a.b == b.b && a.f == b.f
-end
-
-function hash(a::Wick, h::UInt)::UInt
-    return hash((a.b,a.f), h)
-end
-
-function copy(a::Wick)::Wick
-    return Wick(copy(a.b), copy(a.f))
-end
-
-function one(::Type{Wick})
-    return Wick(Dict{String,Boson}(), Dict{String,Fermion}())
-end
-
-function isone(a::Wick)::Bool
-    return isempty(a.b) && isempty(a.f)
-end
-
-function adjoint(a::Wick)::WickOperator
-    r = copy(a)
-    # Adjoint everything, and count fermionic operators.
-    nf = 0
-    for (n,op) in r.b
-        r.b[n] = Boson(op.an, op.cr)
-    end
-    for (n,op) in r.f
-        r.f[n] = Fermion(op.an, op.cr)
-        nf += isfermionic(r.f[n])
-    end
-    nswaps = round(Int, (nf * (nf-1)/2))
-    return (-1)^nswaps * WickOperator(r)
-end
-
-function *(a::Wick, b::Wick)::WickOperator
-    # Operate recursively. The base case: check if either is the identity.
-    if isone(a)
-        return WickOperator(copy(b))
-    elseif isone(b)
-        return WickOperator(copy(a))
-    end
-    # There are both fermionic and bosonic modes in general. If there are
-    # fermionic modes we'll recurse on them first.
-    if isempty(a.f) && isempty(b.f)
-        # There are no fermionic modes.
-        mode = min(minimum(keys(a.b)), minimum(keys(b.b)))
-        # Take the product of this mode.
-        mp = one(BosonOperator)
-        if mode in keys(a.b)
-            mp = mp * BosonOperator(a.b[mode])
+function bmul(cb, a::BasisOperator, b::BasisOperator)
+    # First we have to swap everything into place.
+    nfa::Int = sum(map(isfermion, a.diracs)) + sum(map(isfermion, a.majoranas))
+    nswaps::Int = 0
+    for (ma,mb) in zip(a.diracs,b.diracs)
+        nfa -= isfermion(ma)
+        if isfermion(mb)
+            nswaps += nfa
         end
-        if mode in keys(b.b)
-            mp = mp * BosonOperator(b.b[mode])
+    end
+    for (ma,mb) in zip(a.majoranas,b.majoranas)
+        nfa -= isfermion(ma)
+        if isfermion(mb)
+            nswaps += nfa
         end
-        # Take the product of what remains.
-        a′ = copy(a)
-        b′ = copy(b)
-        delete!(a′.b, mode)
-        delete!(b′.b, mode)
-        p = a′*b′
-        # Merge.
-        r = zero(WickOperator)
-        for (mop,mc) in mp.terms
-            for (wp,wc) in p.terms
-                w = copy(wp)
-                if !isone(mop)
-                    w.b[mode] = mop
-                end
-                r += mc*wc*WickOperator(w)
-            end
+    end
+    # Now record all factors.
+    paulis = Vector{Vector{Tuple{PauliMode,ComplexF64}}}(undef, length(a.paulis))
+    diracs = Vector{Vector{Tuple{DiracMode,ComplexF64}}}(undef, length(a.diracs))
+    majoranas = Vector{Vector{Tuple{MajoranaMode,ComplexF64}}}(undef, length(a.majoranas))
+    boses = Vector{Vector{Tuple{BoseMode,ComplexF64}}}(undef, length(a.boses))
+    for i in 1:length(a.paulis)
+        paulis[i] = Tuple{PauliMode,ComplexF64}[]
+        mmul(a.paulis[i], b.paulis[i]) do m,c
+            push!(paulis[i], (m,c))
         end
-        return r
+    end
+    for i in 1:length(a.diracs)
+        diracs[i] = Tuple{DiracMode,ComplexF64}[]
+        mmul(a.diracs[i], b.diracs[i]) do m,c
+            push!(diracs[i], (m,c))
+        end
+    end
+    for i in 1:length(a.majoranas)
+        majoranas[i] = Tuple{MajoranaMode,ComplexF64}[]
+        mmul(a.majoranas[i], b.majoranas[i]) do m,c
+            push!(majoranas[i], (m,c))
+        end
+    end
+    for i in 1:length(a.boses)
+        boses[i] = Tuple{BoseMode,ComplexF64}[]
+        mmul(a.boses[i], b.boses[i]) do m,c
+            push!(boses[i], (m,c))
+        end
+    end
+    for x in Iterators.product(paulis..., diracs..., majoranas..., boses...)
+        k = 0
+        r = copy(a)
+        c::ComplexF64 = (-1.0)^nswaps
+        for i in 1:length(a.paulis)
+            k += 1
+            r.paulis[i] = x[k][1]
+            c *= x[k][2]
+        end
+        for i in 1:length(a.diracs)
+            k += 1
+            r.diracs[i] = x[k][1]
+            c *= x[k][2]
+        end
+        for i in 1:length(a.majoranas)
+            k += 1
+            r.majoranas[i] = x[k][1]
+            c *= x[k][2]
+        end
+        for i in 1:length(a.boses)
+            k += 1
+            r.boses[i] = x[k][1]
+            c *= x[k][2]
+        end
+        cb(r, c)
+    end
+end
+
+function badjoint(cb, a::BasisOperator)
+    # Number of fermionic modes.
+    nf::Int = 0
+    b = copy(a)
+    # No change needs to be made to Pauli or Majorana. Dirac and Bose modes are
+    # not self-adjoint.
+    for m in a.majoranas
+        nf += isfermion(m)
+    end
+    for (i,m) in enumerate(a.diracs)
+        nf += isfermion(m)
+        b.diracs[i] = DiracMode(m.an,m.cr)
+    end
+    for (i,m) in enumerate(a.boses)
+        b.boses[i] = BoseMode(m.an,m.cr)
+    end
+    # If there are n fermionic modes, the number of swaps to perform is (n-1) +
+    # (n-2) + ... + 1. All that matters is whether this is even or odd.
+    c::ComplexF64 = if nf%4 == 2 || nf%4 == 3
+        -1
     else
-        # Find the first fermionic mode.
-        mode = min(minimum(keys(a.f)), minimum(keys(b.f)))
-        # Take the product of this mode.
-        mp = one(FermionOperator)
-        if mode in keys(a.f)
-            mp = mp * FermionOperator(a.f[mode])
+        1
+    end
+    cb(b,c)
+end
+
+macro algebra(name, block)
+    @assert block.head == :block
+    gens = []
+    idn = nothing
+    for line in block.args
+        if typeof(line) == LineNumberNode
+            continue
         end
-        if mode in keys(b.f)
-            mp = mp * FermionOperator(b.f[mode])
+        if line.head != :(::)
+            @error "Unexpected something"
         end
-        # Take the product of what remains.
-        a′ = copy(a)
-        b′ = copy(b)
-        delete!(a′.f, mode)
-        delete!(b′.f, mode)
-        p = a′*b′
-        # Compute the sign. This sign comes from needing to commute `mode` from b,
-        # through all fermionic operators in a′.
-        naf = 0
-        for (m,aop) in a′.f
-            naf += isfermionic(aop)
-        end
-        if mode in keys(b.f) && isfermionic(b.f[mode])
-            sgn = (-1.)^(naf)
+        n = line.args[1]
+        if typeof(line.args[2]) == Expr
+            if line.args[2].head != :ref
+                @error "Unexpected something"
+            end
+            t, K = line.args[2].args
+            push!(gens, (n, t, (K,)))
         else
-            sgn = 1.
-        end
-        # Merge.
-        r = zero(WickOperator)
-        for (mop,mc) in mp.terms
-            for (wp,wc) in p.terms
-                w = copy(wp)
-                if !isone(mop)
-                    w.f[mode] = mop
-                end
-                r += mc*wc*WickOperator(w)
+            t = line.args[2]
+            if t != :Identity
+                push!(gens, (n, t, ()))
+            else
+                idn = n
             end
         end
-        return sgn * r
+    end
+    def = quote
+    end
+    function append(e)
+        def = quote
+            $def
+            $e
+        end
+    end
+    def = quote
+        n = Dict{Symbol,Int}()
+        n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose] = 0, 0, 0, 0
+    end
+    for (n, t, s) in gens
+        k = if s == ()
+            1
+        else
+            s[1]
+        end
+        append(:(n[$(esc(QuoteNode(t)))] += $(esc(k))))
+    end
+    def = quote
+        $def
+        proto = BasisOperator(n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose])
+        i = Dict{Symbol,Int}()
+        i[:Pauli], i[:Dirac], i[:Majorana], i[:Bose] = 0, 0, 0, 0
+    end
+    function build(t)
+        if t == :Pauli
+            quote
+                bx = BasisOperator(n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose])
+                by = BasisOperator(n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose])
+                bz = BasisOperator(n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose])
+                bx.paulis[i[$(QuoteNode(t))]] = PauliMode(σX)
+                by.paulis[i[$(QuoteNode(t))]] = PauliMode(σY)
+                bz.paulis[i[$(QuoteNode(t))]] = PauliMode(σZ)
+                [Operator(bx),Operator(by),Operator(bz)]
+            end
+        elseif t == :Dirac
+            quote
+                base = BasisOperator(n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose])
+                base.diracs[i[$(QuoteNode(t))]] = DiracMode(false,true)
+                Operator(base)
+            end
+        elseif t == :Majorana
+            quote
+                base = BasisOperator(n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose])
+                base.majoranas[i[$(QuoteNode(t))]] = MajoranaMode(true)
+                Operator(base)
+            end
+        elseif t == :Bose
+            quote
+                base = BasisOperator(n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose])
+                base.boses[i[$(QuoteNode(t))]] = BoseMode(0,1)
+                Operator(base)
+            end
+        end
+    end
+    for (n, t, s) in gens
+        if s == ()
+            append(:(i[$(QuoteNode(t))] += 1))
+            append(:($(esc(n)) = $(build(t))))
+        else
+            @assert length(s) == 1
+            K = s[1]
+            initexpr = :(Vector{Operator}(undef, K))
+            if t == :Pauli
+                initexpr = :(Vector{Vector{Operator}}(undef, K))
+            end
+            def = quote
+                $def
+                K = $(esc(K))
+                $(esc(n)) = $(initexpr)
+                for k in 1:K
+                    i[$(QuoteNode(t))] += 1
+                    $(esc(n))[k] = $(build(t))
+                end
+            end
+        end
+    end
+    if idn != nothing
+        def = quote
+            $def
+            $(esc(idn)) = Operator(BasisOperator(n[:Pauli], n[:Dirac], n[:Majorana], n[:Bose]))
+        end
+    end
+    def
+end
+
+macro check(expr)
+    buf = IOBuffer()
+    Base.show_unquoted(buf, expr)
+    str = String(take!(buf))
+    quote
+        r::Bool = $(esc(expr))
+        if !r
+            printstyled("    Test failed: $($(str))\n", color=:red)
+        end
+        r
     end
 end
 
+function selftest()
+    printstyled("Beginning self-test\n", bold=true)
+    Random.seed!(0)
+
+    printstyled("  Isolated tests: Pauli\n", bold=true)
+    @algebra SinglePauli begin
+        σ::Pauli
+    end
+    @check σ[1] ≈ σ[1]
+    @check !(σ[1] ≈ σ[2])
+    @check adjoint(σ[1]) ≈ σ[1]
+    @check σ[1] * σ[1] ≈ σ[1] * σ[1]
+    @check σ[1] * σ[1] ≈ σ[2] * σ[2]
+    @check σ[1] * σ[2] ≈ 1im * σ[3]
+    @check !(σ[1] * σ[2] ≈ -1im * σ[3])
+    @algebra PauliAlgebra begin
+        σ::Pauli[3]
+    end
+    for (i,j) in zip(1:3,1:3)
+        @check σ[1][i] * σ[2][j] ≈ σ[2][j] * σ[1][i]
+    end
+
+    printstyled("  Isolated tests: Dirac\n", bold=true)
+    @algebra SingleDirac begin
+        a::Dirac
+    end
+    @check a ≈ a
+    @check !(adjoint(a) ≈ a)
+    @check adjoint(a) ≈ adjoint(a)
+    @algebra TwoDiracs begin
+        I::Identity
+        a::Dirac
+        b::Dirac
+    end
+    @check a * b ≈ -b * a
+    @check !(a * b ≈ b * a)
+    @check a * a ≈ 0*a
+    @check !(adjoint(a) * a ≈ a * adjoint(a))
+    @check I - adjoint(a) * a ≈ a * adjoint(a)
+    @algebra DiracAlgebra begin
+        a::Dirac[8]
+    end
+    @check a[1] * a[2] ≈ - a[2] * a[1]
+    @check a[1] * a[2] * adjoint(a[3]) ≈ - adjoint(a[3]) * a[2] * a[1]
+    @check a[1] * a[2] * adjoint(a[3]) * a[4] ≈ a[4] * adjoint(a[3]) * a[2] * a[1]
+    @check adjoint(a[1])*a[1] * a[2] ≈ a[2] * adjoint(a[1]) * a[1]
+
+    printstyled("  Isolated tests: Majorana\n", bold=true)
+    @algebra SingleMajorana begin
+        γ::Majorana
+    end
+    @check !(γ ≈ γ*γ)
+    @check γ*γ ≈ γ*γ*γ
+    @algebra MajoranaAlgebra begin
+        γ::Majorana[8]
+    end
+    for i in 1:8
+        for j in 1:8
+            @check γ[i] * γ[j] ≈ -γ[j] * γ[i]
+        end
+    end
+    for i in 1:8
+        for j in 1:8
+            for k in 1:8
+                @check γ[i] * (γ[j] * γ[k]) ≈ (γ[i] * γ[j]) * γ[k]
+            end
+        end
+    end
+
+    printstyled("  Isolated tests: Bose\n", bold=true)
+    @algebra SingleBose begin
+        I::Identity
+        c::Bose
+    end
+    @check I*c ≈ c*I
+    @check c*c ≈ c*c
+    @check adjoint(c*c) ≈ adjoint(c) * adjoint(c)
+    @check c*adjoint(c) ≈ I + adjoint(c) * c
+    @check c*c*adjoint(c) ≈ c + c*adjoint(c)*c
+    @check c*adjoint(c)*adjoint(c) ≈ adjoint(c*c*adjoint(c))
+
+    @algebra BoseAlgebra begin
+        I::Identity
+        c::Bose[8]
+    end
+
+    K::Int = 6
+    @algebra BigAlgebra begin
+        σ::Pauli[K]
+        a::Dirac[K]
+        γ::Majorana[K]
+        c::Bose[K]
+    end
+    function random()::Operator
+        op = σ[1][1]
+        for k in 1:K
+            i = rand(0:3)
+        end
+        return op
+    end
+    printstyled("  Randomized tests: associativity\n", bold=true)
 end
+
+function main()
+    selftest()
+end
+
+main()
+
