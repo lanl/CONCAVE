@@ -12,6 +12,12 @@ import CONCAVE.Programs: initial, constraints!, objective!
 
 demo(s::Symbol; verbose=false) = demo(Val(s), verbose)
 
+function demo(::Val{:Neutrons}, verbose::Bool)
+end
+
+function demo(::Val{:Hubbard}, verbose::Bool)
+end
+
 function main()
     args = let
         s = ArgParseSettings()

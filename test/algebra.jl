@@ -2,141 +2,124 @@ module TestAlgebras
 
 using Test
 
+using Random
+
 using CONCAVE
 
-@testset "Majorana" begin
-    I,γ = MajoranaAlgebra()
-    @test I*γ ≈ γ
-    @test γ*γ ≈ I
-    @test 2*γ ≈ γ + γ
-    @test I+γ ≈ γ+I
-    @test !(I-γ ≈ γ-I)
-    @test I-γ ≈ -(γ-I)
+@testset "SinglePauli" begin
+    @algebra SinglePauli begin
+        σ::Pauli
+    end
+    @test σ[1] ≈ σ[1]
+    @test !(σ[1] ≈ σ[2])
+    @test adjoint(σ[1]) ≈ σ[1]
+    @test σ[1] * σ[1] ≈ σ[1] * σ[1]
+    @test σ[1] * σ[1] ≈ σ[2] * σ[2]
+    @test σ[1] * σ[2] ≈ 1im * σ[3]
+    @test !(σ[1] * σ[2] ≈ -1im * σ[3])
 end
 
-@testset "Pauli" begin
-    I,X,Y,Z = PauliAlgebra()
-    @test I*I ≈ I
-    @test I*X ≈ X
-    @test I*Y ≈ Y
-    @test I*Z ≈ Z
-    @test X*Y ≈ 1im*Z
-    @test Y*Z ≈ -Z*Y
-    @test Y*Y ≈ I
+@testset "PauliAlgebra" begin
+    @algebra PauliAlgebra begin
+        σ::Pauli[3]
+    end
+    for (i,j) in zip(1:3,1:3)
+        @test σ[1][i] * σ[2][j] ≈ σ[2][j] * σ[1][i]
+    end
 end
 
-@testset "Fermion" begin
-    I,c = FermionAlgebra()
-    cdag = adjoint(c)
-    @test c*c ≈ 0*I
-    @test c*I ≈ c
-    @test cdag*I ≈ cdag
-    @test !(c ≈ cdag)
-    @test I*c ≈ c
-    @test I*cdag ≈ cdag
-    @test cdag*cdag ≈ 0*I
-    @test cdag*c + c*cdag ≈ I
-    @test cdag*c * cdag*c ≈ cdag*c
+@testset "SingleDirac" begin
+    @algebra SingleDirac begin
+        a::Dirac
+    end
+    @test a ≈ a
+    @test !(adjoint(a) ≈ a)
+    @test adjoint(a) ≈ adjoint(a)
 end
 
-@testset "Boson" begin
-    I,a = BosonAlgebra()
-    adag = adjoint(a)
-    @test a*I ≈ a
-    @test I*a ≈ a
-    @test adag*I ≈ adag
-    @test I*adag ≈ adag
-    @test a*adag - adag*a ≈ I
-    @test a*adag*a*adag ≈ -a*adag + a*a*adag*adag
+@testset "TwoDiracs" begin
+    @algebra TwoDiracs begin
+        I::Identity
+        a::Dirac
+        b::Dirac
+    end
+    @test a * b ≈ -b * a
+    @test !(a * b ≈ b * a)
+    @test a * a ≈ 0*a
+    @test !(adjoint(a) * a ≈ a * adjoint(a))
+    @test I - adjoint(a) * a ≈ a * adjoint(a)
 end
 
-@testset "Spin" begin
-    I,X,Y,Z = SpinAlgebra()
+@testset "DiracAlgebra" begin
+    @algebra DiracAlgebra begin
+        a::Dirac[8]
+    end
+    @test a[1] * a[2] ≈ - a[2] * a[1]
+    @test a[1] * a[2] * adjoint(a[3]) ≈ - adjoint(a[3]) * a[2] * a[1]
+    @test a[1] * a[2] * adjoint(a[3]) * a[4] ≈ a[4] * adjoint(a[3]) * a[2] * a[1]
+    @test adjoint(a[1])*a[1] * a[2] ≈ a[2] * adjoint(a[1]) * a[1]
 end
 
-@testset verbose=true "Wick" begin
-    @testset "Bosonic" begin
-        I,ban,fan = WickAlgebra()
-        a,b,c = ban("a"), ban("b"), ban("c")
-        ops = [I,a,b,c,a',b',c',a*a',a*b']
-        @testset "Commutativity" begin
-            for op1 in ops
-                for op2 in ops
-                end
-            end
+@testset "SingleMajorana" begin
+    @algebra SingleMajorana begin
+        γ::Majorana
+    end
+    @test !(γ ≈ γ*γ)
+    @test γ*γ ≈ γ*γ*γ
+end
+
+@testset "MajoranaAlgebra" begin
+    @algebra MajoranaAlgebra begin
+        γ::Majorana[8]
+    end
+    for i in 1:8
+        for j in 1:8
+            @test γ[i] * γ[j] ≈ -γ[j] * γ[i]
         end
-
-        @testset "Associativity" begin
-            opa = [I, a, a', a'*a]
-            opb = [I, b, b', b'*b]
-            ops = []
-            for a′ in opa
-                for b′ in opb
-                    push!(ops, a′*b′)
-                end
-            end
-
-            for op1 in ops
-                for op2 in ops
-                    for op3 in ops
-                        @test op1*(op2*op3) ≈ (op1*op2)*op3
-                    end
-                end
+    end
+    for i in 1:8
+        for j in 1:8
+            for k in 1:8
+                @test γ[i] * (γ[j] * γ[k]) ≈ (γ[i] * γ[j]) * γ[k]
             end
         end
     end
+end
 
-    @testset "Fermionic" begin
-        I,ban,fan = WickAlgebra()
-        z = 0*I
-        a,b,c = fan("a"), fan("b"), fan("c")
-        @test a == a
-        @test a' == a'
-        @test a ≠ a'
-        @test (a*b)' == b'*a'
-        @test (a*b)' ≠ a'*b'
-        @test (a*b*c)' == c' * b' * a'
-
-        @test a*I == a
-        @test I*a == a
-        @test a*b == -b*a
-        @test a*b' == -b'*a
-
-        @test a*a ≈ z
-        @test (a'*a)*(a'*a) ≈ a'*a
-
-        @test I*I == I
-        @test (a*b)*(I*I) == ((a*b)*I)*I
-        @test (a*b)*I == a*b
-
-        @test (a*b*c)' ≈ - a' * b' * c'
-        @testset "Associativity" begin
-            opa = [I, a, a', a'*a]
-            opb = [I, b, b', b'*b]
-            opc = [I, c, c', c'*c]
-            ops = []
-            for a′ in opa
-                for b′ in opb
-                    push!(ops, a′*b′)
-                end
-            end
-
-            for op1 in ops
-                for op2 in ops
-                    for op3 in ops
-                        @test op1*(op2*op3) ≈ (op1*op2)*op3
-                    end
-                end
-            end
-        end
+@testset "SingleBose" begin
+    @algebra SingleBose begin
+        I::Identity
+        c::Bose
     end
+    @test I*c ≈ c*I
+    @test c*c ≈ c*c
+    @test adjoint(c*c) ≈ adjoint(c) * adjoint(c)
+    @test c*adjoint(c) ≈ I + adjoint(c) * c
+    @test c*c*adjoint(c) ≈ c + c*adjoint(c)*c
+    @test c*adjoint(c)*adjoint(c) ≈ adjoint(c*c*adjoint(c))
+end
 
-    @testset "Mixed" begin
-        I,ban,fan = WickAlgebra()
-        @test adjoint(I) ≈ I
-        @test I*I ≈ I
-        @test I*ban("a") ≈ ban("a")
-        @test fan("a")*I ≈ fan("a")
+@testset "BoseAlgebra" begin
+    @algebra BoseAlgebra begin
+        I::Identity
+        c::Bose[8]
+    end
+end
+
+@testset "BigAlgebra" begin
+    K::Int = 6
+    @algebra BigAlgebra begin
+        σ::Pauli[K]
+        a::Dirac[K]
+        γ::Majorana[K]
+        c::Bose[K]
+    end
+    function random()::Operator
+        op = σ[1][1]
+        for k in 1:K
+            i = rand(0:3)
+        end
+        return op
     end
 end
 

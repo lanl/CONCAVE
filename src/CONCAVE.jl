@@ -6,13 +6,7 @@ export CompositeSDP
 export SemidefiniteModel
 export primal, dual
 
-export Operator
-export Majorana, MajoranaAlgebra, MajoranaOperator
-export Pauli, PauliAlgebra, PauliOperator
-export Fermion, FermionAlgebra, FermionOperator
-export Boson, BosonAlgebra, BosonOperator
-export Spins, SpinAlgebra, SpinOperator
-export Wick, WickAlgebra, WickOperator
+export @algebra
 
 export add!, scale!
 

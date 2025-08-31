@@ -49,12 +49,12 @@ TODO
 
 module Algebras
 
+export @algebra
+
 import Base: +,-,*,/,^,adjoint
 import Base: zero, one, isone
 import Base: copy, hash, isequal, isapprox, isless, show
 import Base: setindex!, getindex, in, iterate
-
-using Random
 
 abstract type Mode
 end
@@ -646,122 +646,6 @@ macro algebra(name, block)
         end
     end
     def
-end
-
-macro check(expr)
-    buf = IOBuffer()
-    Base.show_unquoted(buf, expr)
-    str = String(take!(buf))
-    quote
-        r::Bool = $(esc(expr))
-        if !r
-            printstyled("    Test failed: $($(str))\n", color=:red)
-        end
-        r
-    end
-end
-
-function selftest()
-    printstyled("Beginning self-test\n", bold=true)
-    Random.seed!(0)
-
-    printstyled("  Isolated tests: Pauli\n", bold=true)
-    @algebra SinglePauli begin
-        σ::Pauli
-    end
-    @check σ[1] ≈ σ[1]
-    @check !(σ[1] ≈ σ[2])
-    @check adjoint(σ[1]) ≈ σ[1]
-    @check σ[1] * σ[1] ≈ σ[1] * σ[1]
-    @check σ[1] * σ[1] ≈ σ[2] * σ[2]
-    @check σ[1] * σ[2] ≈ 1im * σ[3]
-    @check !(σ[1] * σ[2] ≈ -1im * σ[3])
-    @algebra PauliAlgebra begin
-        σ::Pauli[3]
-    end
-    for (i,j) in zip(1:3,1:3)
-        @check σ[1][i] * σ[2][j] ≈ σ[2][j] * σ[1][i]
-    end
-
-    printstyled("  Isolated tests: Dirac\n", bold=true)
-    @algebra SingleDirac begin
-        a::Dirac
-    end
-    @check a ≈ a
-    @check !(adjoint(a) ≈ a)
-    @check adjoint(a) ≈ adjoint(a)
-    @algebra TwoDiracs begin
-        I::Identity
-        a::Dirac
-        b::Dirac
-    end
-    @check a * b ≈ -b * a
-    @check !(a * b ≈ b * a)
-    @check a * a ≈ 0*a
-    @check !(adjoint(a) * a ≈ a * adjoint(a))
-    @check I - adjoint(a) * a ≈ a * adjoint(a)
-    @algebra DiracAlgebra begin
-        a::Dirac[8]
-    end
-    @check a[1] * a[2] ≈ - a[2] * a[1]
-    @check a[1] * a[2] * adjoint(a[3]) ≈ - adjoint(a[3]) * a[2] * a[1]
-    @check a[1] * a[2] * adjoint(a[3]) * a[4] ≈ a[4] * adjoint(a[3]) * a[2] * a[1]
-    @check adjoint(a[1])*a[1] * a[2] ≈ a[2] * adjoint(a[1]) * a[1]
-
-    printstyled("  Isolated tests: Majorana\n", bold=true)
-    @algebra SingleMajorana begin
-        γ::Majorana
-    end
-    @check !(γ ≈ γ*γ)
-    @check γ*γ ≈ γ*γ*γ
-    @algebra MajoranaAlgebra begin
-        γ::Majorana[8]
-    end
-    for i in 1:8
-        for j in 1:8
-            @check γ[i] * γ[j] ≈ -γ[j] * γ[i]
-        end
-    end
-    for i in 1:8
-        for j in 1:8
-            for k in 1:8
-                @check γ[i] * (γ[j] * γ[k]) ≈ (γ[i] * γ[j]) * γ[k]
-            end
-        end
-    end
-
-    printstyled("  Isolated tests: Bose\n", bold=true)
-    @algebra SingleBose begin
-        I::Identity
-        c::Bose
-    end
-    @check I*c ≈ c*I
-    @check c*c ≈ c*c
-    @check adjoint(c*c) ≈ adjoint(c) * adjoint(c)
-    @check c*adjoint(c) ≈ I + adjoint(c) * c
-    @check c*c*adjoint(c) ≈ c + c*adjoint(c)*c
-    @check c*adjoint(c)*adjoint(c) ≈ adjoint(c*c*adjoint(c))
-
-    @algebra BoseAlgebra begin
-        I::Identity
-        c::Bose[8]
-    end
-
-    K::Int = 6
-    @algebra BigAlgebra begin
-        σ::Pauli[K]
-        a::Dirac[K]
-        γ::Majorana[K]
-        c::Bose[K]
-    end
-    function random()::Operator
-        op = σ[1][1]
-        for k in 1:K
-            i = rand(0:3)
-        end
-        return op
-    end
-    printstyled("  Randomized tests: associativity\n", bold=true)
 end
 
 end
