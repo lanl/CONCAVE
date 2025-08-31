@@ -12,7 +12,30 @@ import CONCAVE.Programs: initial, constraints!, objective!
 
 demo(s::Symbol; verbose=false) = demo(Val(s), verbose)
 
-function demo(::Val{:Neutrons}, verbose::Bool)
+struct NeutronMatterProgram <: ConvexProgram
+end
+
+function demo(::Val{:NeutronMatter}, verbose::Bool)
+    L::Int = 4
+    V = L^3
+    @algebra NeutronAlgebra begin
+        c::Dirac[V]
+    end
+
+    for μ in 0:0.1:1.0
+        plo = NeutronMatterProgram()
+        phi = NeutronMatterProgram()
+
+        lo, ylo = CONCAVE.IPM.solve(plo; verbose=verbose)
+        hi, yhi = CONCAVE.IPM.solve(phi; verbose=verbose)
+
+        if -lo > hi
+            println(stderr, "WARNING: primal proved infeasible")
+        end
+
+        println("$μ $(-lo) $hi")
+        flush(stdout)
+    end
 end
 
 function demo(::Val{:Hubbard}, verbose::Bool)

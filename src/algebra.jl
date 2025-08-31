@@ -44,6 +44,8 @@ TODO
  * Automatic trimming of vanishing coefficients
 
  * Matrix-valued operators
+ 
+ * Multidimensional arrays of operators (c::Dirac[L,L])
 
 =#
 
