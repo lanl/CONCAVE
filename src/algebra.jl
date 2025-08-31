@@ -43,6 +43,8 @@ TODO
 
  * Automatic trimming of vanishing coefficients
 
+ * Matrix-valued operators
+
 =#
 
 import Base: +,-,*,/,^,adjoint
