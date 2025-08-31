@@ -47,6 +47,8 @@ TODO
 
 =#
 
+module Algebras
+
 import Base: +,-,*,/,^,adjoint
 import Base: zero, one, isone
 import Base: copy, hash, isequal, isapprox, isless, show
@@ -762,9 +764,4 @@ function selftest()
     printstyled("  Randomized tests: associativity\n", bold=true)
 end
 
-function main()
-    selftest()
 end
-
-main()
-
