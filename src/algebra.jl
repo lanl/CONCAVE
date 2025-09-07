@@ -23,7 +23,8 @@ With that in mind, the notation to construct an algebra is:
 
 Hopefully this is self-explanatory. After this, algebraic manipulations may be
 performed in the obvious way:
-my_product = σ[2] * σ[4] + 0.3*γ
+
+    my_product = σ[2] * σ[4] + 0.3*γ
 
 =#
 
@@ -41,6 +42,8 @@ TODO
 
  * Type information in BasisOperator?
 
+ * Type information to prevent combining algebras
+
  * Automatic trimming of vanishing coefficients
 
  * Matrix-valued operators
@@ -52,6 +55,7 @@ TODO
 module Algebras
 
 export @algebra
+export Operator
 
 import Base: +,-,*,/,^,adjoint
 import Base: zero, one, isone

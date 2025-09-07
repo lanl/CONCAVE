@@ -7,6 +7,7 @@ export SemidefiniteModel
 export primal, dual
 
 export @algebra
+export Operator
 
 export add!, scale!
 

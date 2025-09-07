@@ -90,8 +90,35 @@ struct NeutronMatterProgram <: ConvexProgram
         end
         H -= μ*N
 
+        # Generating operators
+        fgens = Operator[]
+        bgens = Operator[]
+        for x in 1:L, y in 1:L, z in 1:L
+            i = index(x,y,z)
+            push!(fgens, cu[i])
+            push!(fgens, cd[i])
+            push!(bgens, adjoint(cu[i])*cu[i])
+            push!(bgens, adjoint(cu[i])*cd[i])
+            push!(bgens, adjoint(cd[i])*cd[i])
+        end
+
         # Construct the psd matrices.
-        M = [] # TODO
+        M = Matrix{Operator}[]
+        let
+            Mf = Matrix{Operator}(undef, length(fgens), length(fgens))
+            Mb = Matrix{Operator}(undef, length(bgens), length(bgens))
+            Mfc = Matrix{Operator}(undef, length(fgens), length(fgens))
+            Mbc = Matrix{Operator}(undef, length(bgens), length(bgens))
+            for (i,opi) in enumerate(fgens), (j,opj) in enumerate(fgens)
+                println(i, " ", j)
+                Mf[i,j] = adjoint(opi)*opj
+                Mfc[i,j] = adjoint(opi)*(H*opj - opj*H)
+            end
+            for (i,opi) in enumerate(bgens), (j,opj) in enumerate(bgens)
+                Mb[i,j] = adjoint(opi)*opj
+                Mbc[i,j] = adjoint(opi)*(H*opj - opj*H)
+            end
+        end
 
         # Identify constraint matrices.
         # TODO
