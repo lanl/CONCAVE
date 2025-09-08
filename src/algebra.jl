@@ -502,7 +502,7 @@ function bmul(cb, a::BasisOperator, b::BasisOperator)
     n = prod(ls)
     for i in 1:n
         idx = zeros(Int, length(ls))
-        m = n
+        m = i
         for j in 1:length(ls)
             idx[j] = mod1(m, ls[j])
             m = m - idx[j] + 1
