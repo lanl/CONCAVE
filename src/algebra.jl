@@ -50,12 +50,15 @@ TODO
  
  * Multidimensional arrays of operators (c::Dirac[L,L])
 
+ * Heavy optimization
+
 =#
 
 module Algebras
 
 export @algebra
 export Operator
+export add!
 
 import Base: +,-,*,/,^,adjoint
 import Base: zero, one, isone
@@ -89,6 +92,11 @@ one(::Type{PauliMode}) = PauliMode(σI)
 one(::Type{DiracMode}) = DiracMode(0,0)
 one(::Type{MajoranaMode}) = MajoranaMode(false)
 one(::Type{BoseMode}) = BoseMode(0,0)
+
+isone(pauli::PauliMode) = pauli.pauli == σI
+isone(dirac::DiracMode) = !dirac.cr && !dirac.an
+isone(majoarana::MajoranaMode) = !majorana.n
+isone(bose::BoseMode) = bose.cr == 0 && bose.an == 0
 
 function show(io::IO, m::PauliMode)
     print(io, m.pauli)
@@ -281,7 +289,7 @@ function -(a::Operator, b::Operator)
 end
 
 function *(op1::Operator, op2::Operator)::Operator
-    r = Operator()
+    r::Operator = Operator()
     for (b1,c1) in op1, (b2,c2) in op2
         bmul(b1,b2) do b,c
             r[b] += c1*c2*c
@@ -485,29 +493,43 @@ function bmul(cb, a::BasisOperator, b::BasisOperator)
             push!(boses[i], (m,c))
         end
     end
-    for x in Iterators.product(paulis..., diracs..., majoranas..., boses...)
+    n = 1
+    lpaulis = map(length, paulis)
+    ldiracs = map(length, diracs)
+    lmajoranas = map(length, majoranas)
+    lboses = map(length, boses)
+    ls = [lpaulis..., ldiracs..., lmajoranas..., lboses...]
+    n = prod(ls)
+    for i in 1:n
+        idx = zeros(Int, length(ls))
+        m = n
+        for j in 1:length(ls)
+            idx[j] = mod1(m, ls[j])
+            m = m - idx[j] + 1
+            m = div(m, ls[j])
+        end
         k = 0
         r = copy(a)
         c::ComplexF64 = (-1.0)^nswaps
         for i in 1:length(a.paulis)
             k += 1
-            r.paulis[i] = x[k][1]
-            c *= x[k][2]
+            r.paulis[i] = paulis[k][idx[k]][1]
+            c *= paulis[k][idx[k]][2]
         end
         for i in 1:length(a.diracs)
             k += 1
-            r.diracs[i] = x[k][1]
-            c *= x[k][2]
+            r.diracs[i] = diracs[k][idx[k]][1]
+            c *= diracs[k][idx[k]][2]
         end
         for i in 1:length(a.majoranas)
             k += 1
-            r.majoranas[i] = x[k][1]
-            c *= x[k][2]
+            r.majoranas[i] = majoranas[k][idx[k]][1]
+            c *= majoranas[k][idx[k]][2]
         end
         for i in 1:length(a.boses)
             k += 1
-            r.boses[i] = x[k][1]
-            c *= x[k][2]
+            r.boses[i] = boses[k][idx[k]][1]
+            c *= boses[k][idx[k]][2]
         end
         cb(r, c)
     end

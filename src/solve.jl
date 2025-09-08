@@ -58,18 +58,18 @@ struct NeutronMatterProgram <: ConvexProgram
             i = index(x,y,z)
             if !wrapx || periodic
                 j = index(xp,y,z)
-                H += hopping(i,j)
-                H += nninteraction(i,j)
+                add!(H, hopping(i,j))
+                add!(H, nninteraction(i,j))
             end
             if !wrapy || periodic
                 j = index(x,yp,z)
-                H += hopping(i,j)
-                H += nninteraction(i,j)
+                add!(H, hopping(i,j))
+                add!(H, nninteraction(i,j))
             end
             if !wrapz || periodic
                 j = index(x,y,zp)
-                H += hopping(i,j)
-                H += nninteraction(i,j)
+                add!(H, hopping(i,j))
+                add!(H, nninteraction(i,j))
             end
         end
         # Same-site interaction.
@@ -78,17 +78,17 @@ struct NeutronMatterProgram <: ConvexProgram
             nu = adjoint(cu[i])*cu[i]
             nd = adjoint(cd[i])*cd[i]
             # TODO lattice spacing
-            H += g1 * nu * nd
+            add!(H, nu * nd, g1)
         end
 
         # Chemical potential
         N = 0*I
         for x in 1:L, y in 1:L, z in 1:L
             i = index(x,y,z)
-            N += adjoint(cu[i])*cu[i]
-            N += adjoint(cd[i])*cd[i]
+            add!(N, adjoint(cu[i])*cu[i])
+            add!(N, adjoint(cd[i])*cd[i])
         end
-        H -= μ*N
+        add!(H, μ*N, -1)
 
         # Generating operators
         fgens = Operator[]
@@ -110,7 +110,7 @@ struct NeutronMatterProgram <: ConvexProgram
             Mfc = Matrix{Operator}(undef, length(fgens), length(fgens))
             Mbc = Matrix{Operator}(undef, length(bgens), length(bgens))
             for (i,opi) in enumerate(fgens), (j,opj) in enumerate(fgens)
-                println(i, " ", j)
+                println("$i $j")
                 Mf[i,j] = adjoint(opi)*opj
                 Mfc[i,j] = adjoint(opi)*(H*opj - opj*H)
             end
@@ -150,7 +150,7 @@ function constraints!(cb, p::NeutronMatterProgram, y::Vector{Float64})
 end
 
 function demo(::Val{:NeutronMatter}, verbose::Bool)
-    L::Int = 4
+    L::Int = 3
     g1::Float64 = 0.1
     g2::Float64 = 0.1
     a::Float64 = 0.5
@@ -196,7 +196,11 @@ function main()
     end
 
     if args["profile"]
-        @profile action()
+        Base.exit_on_sigint(false)
+        try
+            @profile action()
+        catch e
+        end
         open("prof-flat", "w") do f
             Profile.print(f, format=:flat, sortedby=:count)
         end
