@@ -150,7 +150,7 @@ function constraints!(cb, p::NeutronMatterProgram, y::Vector{Float64})
 end
 
 function demo(::Val{:NeutronMatter}, verbose::Bool)
-    L::Int = 3
+    L::Int = 2
     g1::Float64 = 0.1
     g2::Float64 = 0.1
     a::Float64 = 0.5
