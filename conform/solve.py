@@ -4,25 +4,27 @@ import re
 import subprocess
 import sys
 
+import numpy as np
+
 from sdp import *
 
 GLOBALS = {}
 
 class Term:
-    def __init__(self, coef, num=1, op='I'):
-        self.num = num
-        self.coef = coef
+    def __init__(self, idx, c=1, op=''):
+        self.c = c
+        self.idx = idx
         self.op = op
 
     def __repr__(self):
-        if self.coef is None:
-            return f"{self.num}*[{self.op}]"
+        if self.idx is None:
+            return f"{self.c}*[{self.op}]"
         else:
-            return f"{self.num}*M({self.coef})*[{self.op}]"
+            return f"{self.c}*M({self.idx})*[{self.op}]"
 
     @staticmethod
     def parse(s):
-        ops = 'I'
+        ops = ''
         mcoef = None
         c = 1
         match = re.match(r'(?ms)([+-])\s+(.*)',s)
@@ -65,8 +67,41 @@ def make_sdp(form):
     print(ham)
     print(sos)
 
+    N = 0
+    ops = set()
+    for term in sos:
+        N = max(N, *term.idx)
+        ops.add(term.op)
+    N += 1
+
+    c = 0.0
+    C = np.zeros((N,N))
+    A = {}
+    b = {}
+    for op in ops:
+        A[op] = np.zeros((N,N))
+        b[op] = 0.0
+
+    for term in ham:
+        if term.idx is not None:
+            raise Exception('Coefficient appeared in Hamiltonian')
+        if term.op == '':
+            raise Exception('Constant term in Hamiltonian, not handled')
+        b[term.op] += term.c
+    for term in sos:
+        if term.op == '':
+            if term.idx is None:
+                c += term.c
+            else:
+                C[term.idx] += term.c
+        else:
+            A[op][term.idx] += term.c
+
+    return SemidefiniteProgram.by_constraints(C, A, b)
+
 def solve(sdp):
-    ipm = InteriorPointSolver()
+    ipm = InteriorPointSolver(sdp)
+    return ipm.solve()
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
