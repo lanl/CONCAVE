@@ -1,5 +1,5 @@
-#define ORDER "12"
-#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1*q2"
+#define ORDER "20"
+#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1*q2,q1^2,q2^2,px*x,px*y,px*z,py*x,py*y,py*z,pz*x,pz*y,pz*z,px*q1,py*q1,pz*q1,px*q2,py*q2,pz*q2"
 #-
 
 #procedure generators(?ops);

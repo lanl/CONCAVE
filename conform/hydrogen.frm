@@ -23,7 +23,7 @@ endargument;
 Local sos = 'sos';
 #endprocedure
 
-Symbols M,R,alpha;
+Symbols M,Minv,alpha;
 Symbols O1,O2;
 Functions Op;
 
@@ -92,6 +92,8 @@ endrepeat;
 repeat id Op?opset = oprod(Op);
 repeat id oprod(?O1)*oprod(?O2) = oprod(?O1,?O2);
 *id conj(c(i?,j?)) * oprod(?O1)*c(k?,l?) = coef(i,j,k,l) * oprod(?O1);
+
+id M^-1 = Minv;
 
 *id c(1,1) = 1;
 *id conj(c(1,1)) = 1;
