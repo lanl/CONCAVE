@@ -15,13 +15,15 @@ class Term:
         self.op = op
 
     def __repr__(self):
-        return f"{self.num}*{self.coef}*[{self.op}]"
+        if self.coef is None:
+            return f"{self.num}*[{self.op}]"
+        else:
+            return f"{self.num}*M({self.coef})*[{self.op}]"
 
     @staticmethod
     def parse(s):
         ops = 'I'
-        coefl = (None,None)
-        coefr = (None,None)
+        mcoef = None
         c = 1
         match = re.match(r'(?ms)([+-])\s+(.*)',s)
         if match.group(1) == '-':
@@ -29,13 +31,9 @@ class Term:
         for factor in match.group(2).split('*'):
             if m := re.match(r'oprod\(([^)]+)\)', factor):
                 ops = m.group(1)
-            elif m := re.match(r'conj\(c\(([0-9]+),([0-9]+)\)\)', factor):
-                if coefl != (None,None):
-                    raise Exception("Two left coefficients")
-                coefl = (int(m.group(1)),int(m.group(2)))
-            elif m := re.match(r'c\(([0-9]+),([0-9]+)\)', factor):
-                if coefr != (None,None):
-                    raise Exception("Two right coefficients")
+            elif m := re.match(r'M\(([0-9]+),([0-9]+)\)', factor):
+                if mcoef is not None:
+                    raise Exception("Nonlinear in M!")
                 coefr = (int(m.group(1)),int(m.group(2)))
             elif re.match(r'i_', factor):
                 c *= 1j
@@ -45,7 +43,7 @@ class Term:
                     c *= n
                 else:
                     raise Exception("What's this: "+factor)
-        return Term((coefl,coefr), c, ops)
+        return Term(mcoef, c, ops)
 
 def parse_expression(expr):
     # Split into terms. A term is a thing that begins ^\s+[+-].
