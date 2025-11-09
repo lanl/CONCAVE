@@ -34,7 +34,7 @@ class Term:
             elif m := re.match(r'M\(([0-9]+),([0-9]+)\)', factor):
                 if mcoef is not None:
                     raise Exception("Nonlinear in M!")
-                coefr = (int(m.group(1)),int(m.group(2)))
+                mcoef = (int(m.group(1)),int(m.group(2)))
             elif re.match(r'i_', factor):
                 c *= 1j
             else:
