@@ -75,8 +75,8 @@ if __name__ == '__main__':
         print('usage: ./solve.py (hydrogen|dihydrogen)')
         sys.exit(1)
     if sys.argv[1] == 'hydrogen':
-        GLOBALS['M'] = 1.0
-        GLOBALS['Minv'] = 1.0
+        GLOBALS['m'] = 1.0
+        GLOBALS['minv'] = 1.0
         GLOBALS['alpha'] = 1.0
         form = subprocess.run(["form", "hydrogen.frm"], capture_output=True).stdout
         sdp = make_sdp(form)
