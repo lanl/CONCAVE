@@ -21,6 +21,7 @@ def _hunpack(v):
     M = np.zeros((N,N), dtype=np.complex128)
     M[np.triu_indices(N)] = v[:(N*(N+1))//2]
     M[np.triu_indices(N,1)] += 1j*v[(N*(N+1))//2:]
+    M[np.tril_indices(N,-1)] = M[np.triu_indices(N,1)].conj()
     return M
 
 class SemidefiniteProgram:
@@ -40,12 +41,16 @@ class SemidefiniteProgram:
         c = []
 
         Av = np.zeros((N*N, len(A)))
-        for (k,M) in enumerate(A.values()):
-            Av[:,k] = _hpack(M)
+        bv = np.zeros(len(A))
+        for (k,op) in enumerate(A.keys()):
+            if np.sum(np.abs(A[op] - A[op].conj().T)) > 1e-8:
+                raise Exception("A appears not to be Hermitian")
+            Av[:,k] = _hpack(A[op])
+            bv[k] = b[op]
 
-        svdU, svdS, svdVt = np.linalg.svd(Av.T)
+        svdU, svdS, svdVh = np.linalg.svd(Av.T)
         rank = np.sum(svdS > 1e-8)
-        Mv = svdVt[rank:].T
+        Mv = svdVh[rank:].T
 
         for n in range(N):
             m.append(_hunpack(Mv[:,n]))
@@ -53,14 +58,23 @@ class SemidefiniteProgram:
         for (n,M) in enumerate(m):
             c.append(np.trace(C @ M))
 
-        # TODO M0
-        exit(0)
+        M0v = svdVh[:rank].conj().T @ np.diag(1/svdS[:rank]) @ svdU[:,:rank].conj().T @ bv
+        M0 = _hunpack(M0v)
+        if True:
+            for op in A.keys():
+                # TODO these should all match...
+                print(np.trace(A[op] @ M0), "  ", b[op])
+            exit(0)
         return SemidefiniteProgram(M0, m, c)
 
 class InteriorPointSolver:
     def __init__(self, sdp):
+        self.M = sdp.M0
+
+    def phase1(self):
         pass
 
     def solve(self):
+        self.phase1()
         pass
 

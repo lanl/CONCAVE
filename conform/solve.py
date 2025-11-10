@@ -119,6 +119,6 @@ if __name__ == '__main__':
         sdp = make_sdp(form)
         print(solve(sdp))
     else:
-        print('Unknown problem')
+        print(f'Unknown problem: {sys.argv[1]}')
         sys.exit(1)
 
