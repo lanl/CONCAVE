@@ -75,11 +75,11 @@ def make_sdp(form):
     N += 1
 
     c = 0.0
-    C = np.zeros((N,N))
+    C = np.zeros((N,N), dtype=np.complex128)
     A = {}
     b = {}
     for op in ops:
-        A[op] = np.zeros((N,N))
+        A[op] = np.zeros((N,N), dtype=np.complex128)
         b[op] = 0.0
 
     for term in ham:
@@ -95,7 +95,7 @@ def make_sdp(form):
             else:
                 C[term.idx] += term.c
         else:
-            A[op][term.idx] += term.c
+            A[term.op][term.idx] += term.c
 
     return SemidefiniteProgram.by_constraints(C, A, b)
 
