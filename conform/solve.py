@@ -64,8 +64,8 @@ def make_sdp(form):
     sos_end = form.index(';', sos_start)
     sos = parse_expression(form[sos_start:sos_end])
 
-    print(ham)
-    print(sos)
+    #print(ham)
+    #print(sos)
 
     N = 0
     ops = set()
