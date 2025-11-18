@@ -70,8 +70,6 @@ class SemidefiniteProgram:
             assert np.isreal(b[op])
             Av[:,k] = _hpack(A[op])
             bv[k] = b[op]
-        # TODO I don't think this packing preserves the inner product... the
-        # diagonal is weighted differently, right?
 
         Av = Av.T
 
@@ -87,22 +85,6 @@ class SemidefiniteProgram:
 
         M0v = svdVh[:rank].conj().T @ np.diag(1/svdS[:rank]) @ svdU[:,:rank].conj().T @ bv
         M0 = _hunpack(M0v)
-        print("VIOLATION: ", np.sum(np.abs(Av @ M0v - bv)))
-        print(Av @ M0v)
-        if True:
-            print("======")
-            for op in A.keys():
-                for M in m:
-                    if np.abs(np.trace(A[op]@M)) > 1e-8:
-                        print("OH NO!")
-                        print(np.trace(A[op]@M))
-                # TODO these should all match...
-                if np.sum(np.abs(np.trace(A[op] @ M0) - b[op])) > 1e-5:
-                    print(op)
-                    print(M0)
-                    print(A[op])
-                    print(np.trace(A[op] @ M0), "  ", b[op])
-            exit(0)
         return SemidefiniteProgram(M0, m, c)
 
 class InteriorPointSolver:
