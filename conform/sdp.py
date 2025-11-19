@@ -49,9 +49,9 @@ class SemidefiniteProgram:
         self.K = len(m)
         assert len(c) == self.K
         self.N = M0.shape[0]
-        self.M0 = M0
-        self.m = m
-        self.c = c
+        self.M0 = jnp.array(M0)
+        self.m = jnp.array(m)
+        self.c = jnp.array(c)
 
     @staticmethod
     def by_constraints(C, A, b):
@@ -77,24 +77,87 @@ class SemidefiniteProgram:
         rank = np.sum(svdS > 1e-8)
         Mv = svdVh[rank:].T
 
-        for n in range(N):
-            m.append(_hunpack(Mv[:,n]))
+        K = Mv.shape[1]
+        for k in range(K):
+            m.append(_hunpack(Mv[:,k]))
 
-        for (n,M) in enumerate(m):
+        for (k,M) in enumerate(m):
             c.append(np.trace(C @ M))
 
         M0v = svdVh[:rank].conj().T @ np.diag(1/svdS[:rank]) @ svdU[:,:rank].conj().T @ bv
         M0 = _hunpack(M0v)
         return SemidefiniteProgram(M0, m, c)
 
+    def _matrix(self):
+        def f(y):
+            return self.M0 + jnp.einsum("iab,i->ab", self.m, y)
+        return f
+
+    def feasible(self):
+        @jax.jit
+        def f(y):
+            M = self._matrix()(y)
+            mv = jnp.min(jnp.linalg.eigvalsh(M))
+            return mv > 0
+        return f
+
+    def objective(self):
+        def f(y):
+            return jnp.dot(self.c, y)
+        return f
+
+    def barrier(self):
+        def f(y):
+            M = self._matrix()(y)
+            _, ld = jnp.linalg.slogdet(M)
+            return -ld
+        return f
+
+class _Phase1Program:
+    def __init__(self, sdp):
+        self.K = sdp.K+1
+        self.sdp = sdp
+
+    def feasible(self):
+        feasible = self.sdp.feasible()
+        matrix = self.sdp._matrix()
+        @jax.jit
+        def f(y):
+            s, y = y[0], y[1:]
+            M = matrix(y)
+            vs = jnp.linalg.eigvalsh(M)
+            # TODO
+            return True
+        return f
+
+    def objective(self):
+        def f(y):
+            return y[1]
+        return f
+
+    def barrier(self):
+        matrix = self.sdp._matrix()
+        def f(y):
+            s, y = y[0], y[1:]
+            M = matrix(y)
+            vs = jnp.linalg.eigvalsh(M)
+            # TODO
+            pass
+        return f
+
 class InteriorPointSolver:
     def __init__(self, sdp):
-        self.M = sdp.M0
-
-    def phase1(self):
-        pass
+        K = sdp.K
+        self.sdp = sdp
+        self.y = jnp.zeros((K,))
 
     def solve(self):
-        self.phase1()
-        pass
+        feasible = self.sdp.feasible()
+        if not feasible(self.y):
+            _phase1 = _Phase1Program(self.sdp)
+            _solver = InteriorPointSolver(_phase1)
+            _solver.solve()
+            self.y = _solver.y[1:]
+        if not feasible(self.y):
+            raise Exception("No feasible initial point found")
 
