@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from functools import partial
 import itertools
 
 import jax
@@ -52,6 +53,9 @@ class SemidefiniteProgram:
         self.M0 = jnp.array(M0)
         self.m = jnp.array(m)
         self.c = jnp.array(c)
+
+    def initial(self):
+        return jnp.zeros((self.K,))
 
     @staticmethod
     def by_constraints(C, A, b):
@@ -118,6 +122,13 @@ class _Phase1Program:
         self.K = sdp.K+1
         self.sdp = sdp
 
+    def initial(self):
+        y = jnp.zeros((self.K,))
+        matrix = self.sdp._matrix()
+        M = matrix(y[1:])
+        vs = jnp.linalg.eigvalsh(M)
+        return y.at[0].set(1-jnp.min(vs))
+
     def feasible(self):
         feasible = self.sdp.feasible()
         matrix = self.sdp._matrix()
@@ -126,8 +137,7 @@ class _Phase1Program:
             s, y = y[0], y[1:]
             M = matrix(y)
             vs = jnp.linalg.eigvalsh(M)
-            # TODO
-            return True
+            return jnp.all(vs > -s)
         return f
 
     def objective(self):
@@ -140,18 +150,25 @@ class _Phase1Program:
         def f(y):
             s, y = y[0], y[1:]
             M = matrix(y)
-            vs = jnp.linalg.eigvalsh(M)
-            # TODO
-            pass
+            M += s*jnp.identity(self.sdp.N)
+            _, ld = jnp.linalg.slogdet(M)
+            return -ld
         return f
+
+@partial(jax.jit, static_argnums=[0])
+def newton(loss, y, t):
+    # Compute gradient and hessian.
+    g = jax.grad(loss)(y,t)
+    h = jax.hessian(loss)(y,t)
+    return y
 
 class InteriorPointSolver:
     def __init__(self, sdp):
         K = sdp.K
         self.sdp = sdp
-        self.y = jnp.zeros((K,))
+        self.y = sdp.initial()
 
-    def solve(self):
+    def solve(self, *, verbose=False):
         feasible = self.sdp.feasible()
         if not feasible(self.y):
             _phase1 = _Phase1Program(self.sdp)
@@ -160,4 +177,21 @@ class InteriorPointSolver:
             self.y = _solver.y[1:]
         if not feasible(self.y):
             raise Exception("No feasible initial point found")
+
+        objective = self.sdp.objective()
+        barrier = self.sdp.barrier()
+
+        def loss(y, t):
+            obj = objective(self.y)
+            bar = barrier(self.y)
+            return obj + bar/t
+
+        t = 1e-2
+        mu = 1.5
+        eps = 1e-10
+
+        while t < 1/eps:
+            # Center
+            t = mu*t
+            self.y = newton(loss, self.y, t)
 
