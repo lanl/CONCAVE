@@ -4,10 +4,19 @@ from functools import partial
 import itertools
 
 import jax
+import jax.debug as jdb
 import jax.numpy as jnp
+import jax.random as jr
 
 import numpy as np
 import numpy.random as nr
+
+jax.config.update('jax_enable_x64', True)
+
+# TODO
+jax.config.update("jax_debug_nans", True)
+jax.config.update("jax_debug_infs", True)
+jax.config.update("jax_disable_jit", True)
 
 # A packing/unpacking of Hermitian matrices, which preserves the inner product.
 def _hpack(M):
@@ -106,12 +115,14 @@ class SemidefiniteProgram:
         return f
 
     def objective(self):
-        def f(y):
+        def f(y, *, differentiate=False):
+            #TODO differentiate
             return jnp.dot(self.c, y)
         return f
 
     def barrier(self):
-        def f(y):
+        def f(y, *, differentiate=False):
+            # TODO differentiate
             M = self._matrix()(y)
             _, ld = jnp.linalg.slogdet(M)
             return -ld
@@ -140,26 +151,55 @@ class _Phase1Program:
             return jnp.all(vs > -s)
         return f
 
-    def objective(self):
+    def objective(self, *, differentiate=False):
+        #TODO differentiate
         def f(y):
-            return y[1]
+            return y[0]
         return f
 
     def barrier(self):
+        #TODO differentiate
         matrix = self.sdp._matrix()
-        def f(y):
+        def f(y, *, differentiate=False):
             s, y = y[0], y[1:]
             M = matrix(y)
             M += s*jnp.identity(self.sdp.N)
-            _, ld = jnp.linalg.slogdet(M)
-            return -ld
+            print(M)
+            vs = jnp.linalg.eigvalsh(M)
+            neg = jnp.min(vs) <= 0
+            ld = jnp.sum(jnp.log(vs).real)
+            return jax.lax.select(neg, jnp.inf, -ld)
         return f
 
-@partial(jax.jit, static_argnums=[0])
 def newton(loss, y, t):
-    # Compute gradient and hessian.
-    g = jax.grad(loss)(y,t)
-    h = jax.hessian(loss)(y,t)
+    while True:
+        v, g, h = loss(y, t, differentiate=True)
+        # Compute gradient and hessian.
+        #v, g = jax.value_and_grad(loss)(y,t)
+        #h = jax.hessian(loss)(y,t)
+
+        dy = -jnp.linalg.solve(h,g)
+
+        # Check termination
+        delta = jnp.dot(g, dy) / 4
+        if jnp.linalg.norm(dy) < 1e-10 or jnp.abs(delta)/jnp.abs(v) < 1e-10:
+            break
+
+        # Backtracking line search
+        alpha = 1.0
+        m = jnp.dot(g, dy)
+        yp = y + alpha * dy
+        vp = loss(yp,t)
+        while vp > v + 0.5 * alpha * m and alpha > 1e-30:
+            alpha *= 0.5
+            yp = y + alpha * dy
+            vp = loss(yp,t)
+        v = vp
+        y = yp
+
+        if alpha < 1e-30:
+            break
+
     return y
 
 class InteriorPointSolver:
@@ -168,7 +208,7 @@ class InteriorPointSolver:
         self.sdp = sdp
         self.y = sdp.initial()
 
-    def solve(self, *, verbose=False):
+    def solve(self, *, verbose=True):
         feasible = self.sdp.feasible()
         if not feasible(self.y):
             _phase1 = _Phase1Program(self.sdp)
@@ -181,9 +221,13 @@ class InteriorPointSolver:
         objective = self.sdp.objective()
         barrier = self.sdp.barrier()
 
-        def loss(y, t):
-            obj = objective(self.y)
-            bar = barrier(self.y)
+        def loss(y, t, *, differentiate=False):
+            if differentiate:
+                obj, objg = objective(y, differentiate=True)
+                bar, barg, h = barrier(y, differentiate=True)
+                return obj + bar/t, objg+barg/t, h/t
+            obj = objective(y)
+            bar = barrier(y)
             return obj + bar/t
 
         t = 1e-2
@@ -191,6 +235,7 @@ class InteriorPointSolver:
         eps = 1e-10
 
         while t < 1/eps:
+            print(t)
             # Center
             t = mu*t
             self.y = newton(loss, self.y, t)
