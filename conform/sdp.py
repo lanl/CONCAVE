@@ -156,7 +156,9 @@ class _Phase1Program:
             g[0] = np.trace(Minv).real
             h = np.zeros((self.K,self.K))
             h[1:,1:] = h_.real
-            # TODO differentiate
+            h[0,0] = -np.einsum("ij,ji", Minv, Minv).real
+            h[0,1:] = -np.einsum("ij,ajk,ki->a", Minv, self.sdp.m, Minv).real
+            h[1:,0] = h[0,1:]
             return -ld, -g, -h
         return -ld
 

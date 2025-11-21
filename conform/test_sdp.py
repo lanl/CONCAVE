@@ -90,7 +90,9 @@ def test_phase1_barrier_hessian():
         for k in range(K):
             yk = y.copy()
             yk[k] += eps
+            _, gp, _ = phase1.barrier(yk, differentiate=True)
             yk[k] -= 2*eps
-            d = 0
-            assert np.abs(d) < 2e-4
+            _, gm, _ = phase1.barrier(yk, differentiate=True)
+            d = (gp-gm)/(2*eps)
+            assert np.mean(np.abs(d - h[:,k])) < 1e-3
 
