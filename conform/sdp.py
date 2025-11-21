@@ -89,37 +89,29 @@ class SemidefiniteProgram:
         M0 = _hunpack(M0v)
         return SemidefiniteProgram(M0, m, c)
 
-    def _matrix(self):
-        def f(y):
-            return self.M0 + np.einsum("iab,i->ab", self.m, y)
-        return f
+    def _matrix(self, y):
+        return self.M0 + np.einsum("iab,i->ab", self.m, y)
 
-    def feasible(self):
-        def f(y):
-            M = self._matrix()(y)
-            mv = np.min(np.linalg.eigvalsh(M))
-            return mv > 0
-        return f
+    def feasible(self, y):
+        M = self._matrix(y)
+        mv = np.min(np.linalg.eigvalsh(M))
+        return mv > 0
 
-    def objective(self):
-        def f(y, *, differentiate=False):
-            r = np.dot(self.c, y)
-            if differentiate:
-                return r, self.c
-            return r
-        return f
+    def objective(self, y, *, differentiate=False):
+        r = np.dot(self.c, y)
+        if differentiate:
+            return r, self.c
+        return r
 
-    def barrier(self):
-        def f(y, *, differentiate=False):
-            M = self._matrix()(y)
-            _, ld = np.linalg.slogdet(M)
-            if differentiate:
-                Minv = np.linalg.inv(M)
-                g = np.einsum("ij,aji->a", Minv, self.m)
-                h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m)
-                return -ld, -g, -h
-            return -ld
-        return f
+    def barrier(self, y, *, differentiate=False):
+        M = self._matrix(y)
+        _, ld = np.linalg.slogdet(M)
+        if differentiate:
+            Minv = np.linalg.inv(M)
+            g = np.einsum("ij,aji->a", Minv, self.m)
+            h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m)
+            return -ld, -g, -h
+        return -ld
 
 class _Phase1Program:
     def __init__(self, sdp):
@@ -128,50 +120,40 @@ class _Phase1Program:
 
     def initial(self):
         y = np.zeros((self.K,))
-        matrix = self.sdp._matrix()
-        M = matrix(y[1:])
+        M = self.sdp._matrix(y[1:])
         vs = np.linalg.eigvalsh(M)
         y[0] = 1-np.min(vs)
         return y
 
-    def feasible(self):
-        feasible = self.sdp.feasible()
-        matrix = self.sdp._matrix()
-        def f(y):
-            s, y = y[0], y[1:]
-            M = matrix(y)
-            vs = np.linalg.eigvalsh(M)
-            return np.all(vs > -s)
-        return f
+    def feasible(self, y):
+        s, y = y[0], y[1:]
+        M = self.sdp._matrix(y)
+        vs = np.linalg.eigvalsh(M)
+        return np.all(vs > -s)
 
-    def objective(self):
-        def f(y, *, differentiate=False):
-            if differentiate:
-                g = np.zeros_like(y)
-                g[0] = 1
-                return y[0], g
-            return y[0]
-        return f
+    def objective(self, y, *, differentiate=False):
+        if differentiate:
+            g = np.zeros_like(y)
+            g[0] = 1
+            return y[0], g
+        return y[0]
 
-    def barrier(self):
-        matrix = self.sdp._matrix()
-        def f(y, *, differentiate=False):
-            s, y = y[0], y[1:]
-            M = matrix(y)
-            M += s*np.identity(self.sdp.N)
-            vs = np.linalg.eigvalsh(M)
-            neg = np.min(vs) <= 0
-            if neg:
-                raise Exception("Requested to differentiate infinity")
-            ld = np.sum(np.log(vs).real)
-            if differentiate:
-                Minv = np.linalg.inv(M)
-                g = np.einsum("ij,aji->a", Minv, self.m)
-                h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m)
-                # TODO differentiate
-                return -ld, None, None
-            return -ld
-        return f
+    def barrier(self, y, *, differentiate=False):
+        s, y = y[0], y[1:]
+        M = self.sdp._matrix(y)
+        M += s*np.identity(self.sdp.N)
+        vs = np.linalg.eigvalsh(M)
+        neg = np.min(vs) <= 0
+        if neg:
+            raise Exception("Requested to differentiate infinity")
+        ld = np.sum(np.log(vs).real)
+        if differentiate:
+            Minv = np.linalg.inv(M)
+            g = np.einsum("ij,aji->a", Minv, self.sdp.m)
+            h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.sdp.m, Minv, self.sdp.m)
+            # TODO differentiate
+            return -ld, None, None
+        return -ld
 
 def newton(loss, y, t):
     while True:
@@ -211,22 +193,18 @@ class InteriorPointSolver:
         self.y = sdp.initial()
 
     def solve(self, *, verbose=True):
-        feasible = self.sdp.feasible()
-        if not feasible(self.y):
+        if not self.sdp.feasible(self.y):
             _phase1 = _Phase1Program(self.sdp)
             _solver = InteriorPointSolver(_phase1)
             _solver.solve()
             self.y = _solver.y[1:]
-        if not feasible(self.y):
+        if not self.sdp.feasible(self.y):
             raise Exception("No feasible initial point found")
-
-        objective = self.sdp.objective()
-        barrier = self.sdp.barrier()
 
         def loss(y, t, *, differentiate=False):
             if differentiate:
-                obj, objg = objective(y, differentiate=True)
-                bar, barg, h = barrier(y, differentiate=True)
+                obj, objg = self.sdp.objective(y, differentiate=True)
+                bar, barg, h = self.sdp.barrier(y, differentiate=True)
                 return obj + bar/t, objg+barg/t, h/t
             obj = objective(y)
             bar = barrier(y)

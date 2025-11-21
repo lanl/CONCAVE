@@ -36,13 +36,40 @@ def test_sdp_barrier_hessian():
     pass
 
 def _make_phase1(N,K):
-    pass
+    M0 = nr.normal(size=(N,N)) + 1j*nr.normal(size=(N,N))
+    M0 = M0 + M0.conj().T
+    m = nr.normal(size=(K,N,N)) + 1j*nr.normal(size=(K,N,N))
+    m += np.einsum("aij->aji", m.conj())
+    c = nr.normal(size=(K,))
+    prog = sdp.SemidefiniteProgram(M0, m, c)
+    return sdp._Phase1Program(prog)
 
 def test_phase1_objective_gradient():
-    phase1 = _make_phase1(8,13)
+    K = 13
+    phase1 = _make_phase1(8,K)
+    y = nr.normal(size=K)
+    obj0, grad = phase1.objective(y, differentiate=True)
+    eps = 1e-5
+    for k in range(K):
+        yk = y.copy()
+        yk[k] += eps
+        objk = phase1.objective(yk)
+        d = (objk-obj0)/eps
+        assert np.abs(d - grad[k]) < 1e-4
 
 def test_phase1_barrier_gradient():
-    phase1 = _make_phase1(8,13)
+    K = 13
+    phase1 = _make_phase1(8,K)
+    y = nr.normal(size=K)
+    bar0, grad = phase1.barrier(y, differentiate=True)
+    eps = 1e-5
+    for k in range(K):
+        yk = y.copy()
+        yk[k] += eps
+        bark = phase1.barrier(yk)
+        d = (bark-bar0)/eps
+        assert np.abs(d - grad[k]) < 1e-4
 
 def test_phase1_barrier_hessian():
-    phase1 = _make_phase1(8,13)
+    K = 13
+    phase1 = _make_phase1(8,K)
