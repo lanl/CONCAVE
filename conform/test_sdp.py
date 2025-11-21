@@ -26,3 +26,23 @@ def test_hpack_product():
         ip2 = np.trace(A.conj().T @ B)
         assert np.abs(ip1-ip2) < 1e-5
 
+def test_sdp_objective_gradient():
+    pass
+
+def test_sdp_barrier_gradient():
+    pass
+
+def test_sdp_barrier_hessian():
+    pass
+
+def _make_phase1(N,K):
+    pass
+
+def test_phase1_objective_gradient():
+    phase1 = _make_phase1(8,13)
+
+def test_phase1_barrier_gradient():
+    phase1 = _make_phase1(8,13)
+
+def test_phase1_barrier_hessian():
+    phase1 = _make_phase1(8,13)

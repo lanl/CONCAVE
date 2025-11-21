@@ -3,20 +3,8 @@
 from functools import partial
 import itertools
 
-import jax
-import jax.debug as jdb
-import jax.numpy as jnp
-import jax.random as jr
-
 import numpy as np
 import numpy.random as nr
-
-jax.config.update('jax_enable_x64', True)
-
-# TODO
-jax.config.update("jax_debug_nans", True)
-jax.config.update("jax_debug_infs", True)
-jax.config.update("jax_disable_jit", True)
 
 # A packing/unpacking of Hermitian matrices, which preserves the inner product.
 def _hpack(M):
@@ -59,12 +47,12 @@ class SemidefiniteProgram:
         self.K = len(m)
         assert len(c) == self.K
         self.N = M0.shape[0]
-        self.M0 = jnp.array(M0)
-        self.m = jnp.array(m)
-        self.c = jnp.array(c)
+        self.M0 = np.array(M0)
+        self.m = np.array(m)
+        self.c = np.array(c)
 
     def initial(self):
-        return jnp.zeros((self.K,))
+        return np.zeros((self.K,))
 
     @staticmethod
     def by_constraints(C, A, b):
@@ -103,28 +91,33 @@ class SemidefiniteProgram:
 
     def _matrix(self):
         def f(y):
-            return self.M0 + jnp.einsum("iab,i->ab", self.m, y)
+            return self.M0 + np.einsum("iab,i->ab", self.m, y)
         return f
 
     def feasible(self):
-        @jax.jit
         def f(y):
             M = self._matrix()(y)
-            mv = jnp.min(jnp.linalg.eigvalsh(M))
+            mv = np.min(np.linalg.eigvalsh(M))
             return mv > 0
         return f
 
     def objective(self):
         def f(y, *, differentiate=False):
-            #TODO differentiate
-            return jnp.dot(self.c, y)
+            r = np.dot(self.c, y)
+            if differentiate:
+                return r, self.c
+            return r
         return f
 
     def barrier(self):
         def f(y, *, differentiate=False):
-            # TODO differentiate
             M = self._matrix()(y)
-            _, ld = jnp.linalg.slogdet(M)
+            _, ld = np.linalg.slogdet(M)
+            if differentiate:
+                Minv = np.linalg.inv(M)
+                g = np.einsum("ij,aji->a", Minv, self.m)
+                h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m)
+                return -ld, -g, -h
             return -ld
         return f
 
@@ -134,41 +127,50 @@ class _Phase1Program:
         self.sdp = sdp
 
     def initial(self):
-        y = jnp.zeros((self.K,))
+        y = np.zeros((self.K,))
         matrix = self.sdp._matrix()
         M = matrix(y[1:])
-        vs = jnp.linalg.eigvalsh(M)
-        return y.at[0].set(1-jnp.min(vs))
+        vs = np.linalg.eigvalsh(M)
+        y[0] = 1-np.min(vs)
+        return y
 
     def feasible(self):
         feasible = self.sdp.feasible()
         matrix = self.sdp._matrix()
-        @jax.jit
         def f(y):
             s, y = y[0], y[1:]
             M = matrix(y)
-            vs = jnp.linalg.eigvalsh(M)
-            return jnp.all(vs > -s)
+            vs = np.linalg.eigvalsh(M)
+            return np.all(vs > -s)
         return f
 
-    def objective(self, *, differentiate=False):
-        #TODO differentiate
-        def f(y):
+    def objective(self):
+        def f(y, *, differentiate=False):
+            if differentiate:
+                g = np.zeros_like(y)
+                g[0] = 1
+                return y[0], g
             return y[0]
         return f
 
     def barrier(self):
-        #TODO differentiate
         matrix = self.sdp._matrix()
         def f(y, *, differentiate=False):
             s, y = y[0], y[1:]
             M = matrix(y)
-            M += s*jnp.identity(self.sdp.N)
-            print(M)
-            vs = jnp.linalg.eigvalsh(M)
-            neg = jnp.min(vs) <= 0
-            ld = jnp.sum(jnp.log(vs).real)
-            return jax.lax.select(neg, jnp.inf, -ld)
+            M += s*np.identity(self.sdp.N)
+            vs = np.linalg.eigvalsh(M)
+            neg = np.min(vs) <= 0
+            if neg:
+                raise Exception("Requested to differentiate infinity")
+            ld = np.sum(np.log(vs).real)
+            if differentiate:
+                Minv = np.linalg.inv(M)
+                g = np.einsum("ij,aji->a", Minv, self.m)
+                h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m)
+                # TODO differentiate
+                return -ld, None, None
+            return -ld
         return f
 
 def newton(loss, y, t):
@@ -178,16 +180,16 @@ def newton(loss, y, t):
         #v, g = jax.value_and_grad(loss)(y,t)
         #h = jax.hessian(loss)(y,t)
 
-        dy = -jnp.linalg.solve(h,g)
+        dy = -np.linalg.solve(h,g)
 
         # Check termination
-        delta = jnp.dot(g, dy) / 4
-        if jnp.linalg.norm(dy) < 1e-10 or jnp.abs(delta)/jnp.abs(v) < 1e-10:
+        delta = np.dot(g, dy) / 4
+        if np.linalg.norm(dy) < 1e-10 or np.abs(delta)/np.abs(v) < 1e-10:
             break
 
         # Backtracking line search
         alpha = 1.0
-        m = jnp.dot(g, dy)
+        m = np.dot(g, dy)
         yp = y + alpha * dy
         vp = loss(yp,t)
         while vp > v + 0.5 * alpha * m and alpha > 1e-30:
