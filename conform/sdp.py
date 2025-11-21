@@ -149,10 +149,15 @@ class _Phase1Program:
         ld = np.sum(np.log(vs).real)
         if differentiate:
             Minv = np.linalg.inv(M)
-            g = np.einsum("ij,aji->a", Minv, self.sdp.m)
-            h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.sdp.m, Minv, self.sdp.m)
+            g_ = np.einsum("ij,aji->a", Minv, self.sdp.m)
+            h_ = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.sdp.m, Minv, self.sdp.m)
+            g = np.zeros((self.K,))
+            g[1:] = g_.real
+            g[0] = np.trace(Minv).real
+            h = np.zeros((self.K,self.K))
+            h[1:,1:] = h_.real
             # TODO differentiate
-            return -ld, None, None
+            return -ld, -g, -h
         return -ld
 
 def newton(loss, y, t):

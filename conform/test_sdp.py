@@ -47,7 +47,10 @@ def _make_phase1(N,K):
 def test_phase1_objective_gradient():
     K = 13
     phase1 = _make_phase1(8,K)
+    K += 1
     y = nr.normal(size=K)
+    while not phase1.feasible(y):
+        y[0] += 1
     obj0, grad = phase1.objective(y, differentiate=True)
     eps = 1e-5
     for k in range(K):
@@ -58,18 +61,36 @@ def test_phase1_objective_gradient():
         assert np.abs(d - grad[k]) < 1e-4
 
 def test_phase1_barrier_gradient():
-    K = 13
-    phase1 = _make_phase1(8,K)
-    y = nr.normal(size=K)
-    bar0, grad = phase1.barrier(y, differentiate=True)
-    eps = 1e-5
-    for k in range(K):
-        yk = y.copy()
-        yk[k] += eps
-        bark = phase1.barrier(yk)
-        d = (bark-bar0)/eps
-        assert np.abs(d - grad[k]) < 1e-4
+    for K_ in range(10,30):
+        phase1 = _make_phase1(8,K_)
+        K = K_+1
+        y = nr.normal(size=K)
+        while not phase1.feasible(y):
+            y[0] += 1
+        bar0, grad, _ = phase1.barrier(y, differentiate=True)
+        eps = 1e-7
+        for k in range(K):
+            yk = y.copy()
+            yk[k] += eps
+            barp = phase1.barrier(yk)
+            yk[k] -= 2*eps
+            barm = phase1.barrier(yk)
+            d = (barp-barm)/(2*eps)
+            assert np.abs(d - grad[k]) < 2e-4
 
 def test_phase1_barrier_hessian():
-    K = 13
-    phase1 = _make_phase1(8,K)
+    for K_ in range(10,30):
+        phase1 = _make_phase1(8,K_)
+        K = K_+1
+        y = nr.normal(size=K)
+        while not phase1.feasible(y):
+            y[0] += 1
+        _, _, h = phase1.barrier(y, differentiate=True)
+        eps = 1e-7
+        for k in range(K):
+            yk = y.copy()
+            yk[k] += eps
+            yk[k] -= 2*eps
+            d = 0
+            assert np.abs(d) < 2e-4
+
