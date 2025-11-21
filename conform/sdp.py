@@ -144,10 +144,10 @@ class _Phase1Program:
         M += s*np.identity(self.sdp.N)
         vs = np.linalg.eigvalsh(M)
         neg = np.min(vs) <= 0
-        if neg:
-            raise Exception("Requested to differentiate infinity")
-        ld = np.sum(np.log(vs).real)
         if differentiate:
+            if neg:
+                raise Exception("Requested to differentiate infinity")
+            ld = np.sum(np.log(vs).real)
             Minv = np.linalg.inv(M)
             g_ = np.einsum("ij,aji->a", Minv, self.sdp.m)
             h_ = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.sdp.m, Minv, self.sdp.m)
@@ -160,14 +160,14 @@ class _Phase1Program:
             h[0,1:] = -np.einsum("ij,ajk,ki->a", Minv, self.sdp.m, Minv).real
             h[1:,0] = h[0,1:]
             return -ld, -g, -h
+        if neg:
+            return np.inf
+        ld = np.sum(np.log(vs).real)
         return -ld
 
 def newton(loss, y, t):
     while True:
         v, g, h = loss(y, t, differentiate=True)
-        # Compute gradient and hessian.
-        #v, g = jax.value_and_grad(loss)(y,t)
-        #h = jax.hessian(loss)(y,t)
 
         dy = -np.linalg.solve(h,g)
 
@@ -201,9 +201,13 @@ class InteriorPointSolver:
 
     def solve(self, *, verbose=True):
         if not self.sdp.feasible(self.y):
+            if verbose:
+                print("Solving phase 1...")
             _phase1 = _Phase1Program(self.sdp)
             _solver = InteriorPointSolver(_phase1)
             _solver.solve()
+            if verbose:
+                print("  feasible point found!")
             self.y = _solver.y[1:]
         if not self.sdp.feasible(self.y):
             raise Exception("No feasible initial point found")
@@ -213,8 +217,8 @@ class InteriorPointSolver:
                 obj, objg = self.sdp.objective(y, differentiate=True)
                 bar, barg, h = self.sdp.barrier(y, differentiate=True)
                 return obj + bar/t, objg+barg/t, h/t
-            obj = objective(y)
-            bar = barrier(y)
+            obj = self.sdp.objective(y)
+            bar = self.sdp.barrier(y)
             return obj + bar/t
 
         t = 1e-2

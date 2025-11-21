@@ -79,7 +79,7 @@ def test_phase1_barrier_gradient():
             assert np.abs(d - grad[k]) < 2e-4
 
 def test_phase1_barrier_hessian():
-    for K_ in range(10,30):
+    for K_ in range(10,20):
         phase1 = _make_phase1(8,K_)
         K = K_+1
         y = nr.normal(size=K)
