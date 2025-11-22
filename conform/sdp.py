@@ -83,7 +83,7 @@ class SemidefiniteProgram:
             m.append(_hunpack(Mv[:,k]))
 
         for (k,M) in enumerate(m):
-            c.append(np.trace(C @ M))
+            c.append(np.trace(C @ M).real)
 
         M0v = svdVh[:rank].conj().T @ np.diag(1/svdS[:rank]) @ svdU[:,:rank].conj().T @ bv
         M0 = _hunpack(M0v)
@@ -108,8 +108,8 @@ class SemidefiniteProgram:
         _, ld = np.linalg.slogdet(M)
         if differentiate:
             Minv = np.linalg.inv(M)
-            g = np.einsum("ij,aji->a", Minv, self.m)
-            h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m)
+            g = np.einsum("ij,aji->a", Minv, self.m).real
+            h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m).real
             return -ld, -g, -h
         return -ld
 
@@ -163,11 +163,15 @@ class _Phase1Program:
         if neg:
             return np.inf
         ld = np.sum(np.log(vs).real)
+        # TODO the logarithm is unbounded above...
         return -ld
 
-def newton(loss, y, t):
-    while True:
+def newton(loss, y, t, *, maxiter=1000):
+    K = len(y)
+    niter = 0
+    while niter < maxiter:
         v, g, h = loss(y, t, differentiate=True)
+        h += 1e-8 * np.identity(K)
 
         dy = -np.linalg.solve(h,g)
 
@@ -190,6 +194,8 @@ def newton(loss, y, t):
 
         if alpha < 1e-30:
             break
+
+        niter += 1
 
     return y
 
@@ -222,12 +228,13 @@ class InteriorPointSolver:
             return obj + bar/t
 
         t = 1e-2
-        mu = 1.5
+        mu = 2.0
         eps = 1e-10
 
         while t < 1/eps:
             print(t)
             # Center
             t = mu*t
-            self.y = newton(loss, self.y, t)
+            self.y = newton(loss, self.y, t, maxiter=100)
+        return self.sdp.objective(self.y)
 

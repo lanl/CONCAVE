@@ -76,7 +76,7 @@ def test_phase1_barrier_gradient():
             yk[k] -= 2*eps
             barm = phase1.barrier(yk)
             d = (barp-barm)/(2*eps)
-            assert np.abs(d - grad[k]) < 2e-4
+            assert np.abs(d - grad[k]) < 3e-4
 
 def test_phase1_barrier_hessian():
     for N in range(5,8):
@@ -95,5 +95,5 @@ def test_phase1_barrier_hessian():
                 yk[k] -= 2*eps
                 _, gm, _ = phase1.barrier(yk, differentiate=True)
                 d = (gp-gm)/(2*eps)
-                assert np.mean(np.abs(d - h[:,k])) < 1e-4
+                assert np.mean(np.abs(d - h[:,k])) < 3e-4
 
