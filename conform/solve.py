@@ -40,7 +40,7 @@ class Term:
             elif re.match(r'i_', factor):
                 c *= 1j
             else:
-                n = eval(factor, GLOBALS)
+                n = eval(factor.replace('^','**'), GLOBALS)
                 c *= float(n)
         return Term(mcoef, c, ops)
 
@@ -126,14 +126,13 @@ if __name__ == '__main__':
         GLOBALS['alpha'] = 1.0
         form = subprocess.run(["form", "hydrogen.frm"], capture_output=True).stdout
         sdp = make_sdp(form)
-        print(solve(sdp))
+        print(solve(sdp, verbose=True))
     elif sys.argv[1] == 'dihydrogen':
         R = 1.0
         GLOBALS['m'] = 1.0
         GLOBALS['minv'] = 1.0
         GLOBALS['alpha'] = 1.0
         GLOBALS['R'] = R
-        GLOBALS['R2'] = R**2
         form = subprocess.run(["form", "dihydrogen.frm"], capture_output=True).stdout
         sdp = make_sdp(form)
         print(solve(sdp, verbose=True))

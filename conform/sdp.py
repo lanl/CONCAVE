@@ -154,14 +154,14 @@ class _Phase1Program:
             ld = np.sum(np.log(vs).real)
             Minv = np.linalg.inv(M)
             g_ = np.einsum("ij,aji->a", Minv, self.sdp.m)
-            h_ = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.sdp.m, Minv, self.sdp.m)
+            h_ = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.sdp.m, Minv, self.sdp.m, optimize=True)
             g = np.zeros((self.K,))
             g[1:] = g_.real
             g[0] = np.trace(Minv).real
             h = np.zeros((self.K,self.K))
             h[1:,1:] = h_.real
             h[0,0] = -np.einsum("ij,ji", Minv, Minv).real
-            h[0,1:] = -np.einsum("ij,ajk,ki->a", Minv, self.sdp.m, Minv).real
+            h[0,1:] = -np.einsum("ij,ajk,ki->a", Minv, self.sdp.m, Minv, optimize=True).real
             h[1:,0] = h[0,1:]
             return -ld, -g, -h
         if neg:
@@ -215,9 +215,9 @@ class InteriorPointSolver:
                 print("Solving phase 1...")
             _phase1 = _Phase1Program(self.sdp)
             _solver = InteriorPointSolver(_phase1)
-            _solver.solve()
+            _solver.solve(verbose=verbose)
             if verbose:
-                print("  feasible point found!")
+                print("  Phase 1 complete!")
             self.y = _solver.y[1:]
         else:
             if verbose:
@@ -240,9 +240,11 @@ class InteriorPointSolver:
 
         while t < 1/eps:
             if verbose:
-                print(t)
+                print(f"{t} ", end='', flush=True)
             # Center
             t = mu*t
             self.y = newton(loss, self.y, t, maxiter=100)
+            if verbose:
+                print(f"{self.sdp.objective(self.y)} {loss(self.y,t)}", flush=True)
         return self.sdp.objective(self.y)
 
