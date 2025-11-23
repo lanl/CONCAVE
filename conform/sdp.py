@@ -106,7 +106,10 @@ class SemidefiniteProgram:
 
     def barrier(self, y, *, differentiate=False):
         M = self._matrix(y)
-        _, ld = np.linalg.slogdet(M)
+        vals = np.linalg.eigvalsh(M)
+        if np.any(vals <= 0):
+            return np.inf
+        ld = np.sum(np.log(vals))
         if differentiate:
             Minv = np.linalg.inv(M)
             g = np.einsum("ij,aji->a", Minv, self.m).real
@@ -206,7 +209,7 @@ class InteriorPointSolver:
         self.sdp = sdp
         self.y = sdp.initial()
 
-    def solve(self, *, verbose=True):
+    def solve(self, *, verbose=False):
         if not self.sdp.feasible(self.y):
             if verbose:
                 print("Solving phase 1...")
@@ -233,7 +236,8 @@ class InteriorPointSolver:
         eps = 1e-10
 
         while t < 1/eps:
-            print(t)
+            if verbose:
+                print(t)
             # Center
             t = mu*t
             self.y = newton(loss, self.y, t, maxiter=100)

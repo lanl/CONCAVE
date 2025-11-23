@@ -102,6 +102,7 @@ def make_sdp(form, *, verbose=False):
         print(C)
         print()
         for op in ops:
+            print(f"b[{op}]: {b[op]}")
             print(f"A[{op}]:")
             print(A[op])
             print()
@@ -113,8 +114,10 @@ def solve(sdp, *, verbose=False):
     obj = ipm.solve()
     if verbose:
         print(f"y: {ipm.y}")
-        print(f"M: {sdp._matrix(ipm.y)}")
-    return obj
+        M = sdp._matrix(ipm.y)
+        print(f"M: {M}")
+        print(f" eigenvalues: {np.linalg.eigvalsh(M)}")
+    return -obj
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -125,8 +128,8 @@ if __name__ == '__main__':
         GLOBALS['minv'] = 1.0
         GLOBALS['alpha'] = 1.0
         form = subprocess.run(["form", "hydrogen.frm"], capture_output=True).stdout
-        sdp = make_sdp(form, verbose=True)
-        print(solve(sdp, verbose=True))
+        sdp = make_sdp(form)
+        print(solve(sdp))
     elif sys.argv[1] == 'dihydrogen':
         form = subprocess.run(["form", "dihydrogen.frm"], capture_output=True).stdout
         sdp = make_sdp(form)
