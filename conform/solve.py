@@ -41,10 +41,7 @@ class Term:
                 c *= 1j
             else:
                 n = eval(factor, GLOBALS)
-                if type(n) == float:
-                    c *= n
-                else:
-                    raise Exception("What's this: "+factor)
+                c *= float(n)
         return Term(mcoef, c, ops)
 
 def parse_expression(expr):
@@ -64,8 +61,8 @@ def make_sdp(form, *, verbose=False):
     sos_end = form.index(';', sos_start)
     sos = parse_expression(form[sos_start:sos_end])
 
-    print(ham)
-    print(sos)
+    #print(ham)
+    #print(sos)
 
     N = 0
     ops = set()
@@ -111,7 +108,7 @@ def make_sdp(form, *, verbose=False):
 
 def solve(sdp, *, verbose=False):
     ipm = InteriorPointSolver(sdp)
-    obj = ipm.solve()
+    obj = ipm.solve(verbose=verbose)
     if verbose:
         print(f"y: {ipm.y}")
         M = sdp._matrix(ipm.y)
@@ -131,9 +128,15 @@ if __name__ == '__main__':
         sdp = make_sdp(form)
         print(solve(sdp))
     elif sys.argv[1] == 'dihydrogen':
+        R = 1.0
+        GLOBALS['m'] = 1.0
+        GLOBALS['minv'] = 1.0
+        GLOBALS['alpha'] = 1.0
+        GLOBALS['R'] = R
+        GLOBALS['R2'] = R**2
         form = subprocess.run(["form", "dihydrogen.frm"], capture_output=True).stdout
         sdp = make_sdp(form)
-        print(solve(sdp))
+        print(solve(sdp, verbose=True))
     else:
         print(f'Unknown problem: {sys.argv[1]}')
         sys.exit(1)

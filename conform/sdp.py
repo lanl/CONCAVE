@@ -219,6 +219,9 @@ class InteriorPointSolver:
             if verbose:
                 print("  feasible point found!")
             self.y = _solver.y[1:]
+        else:
+            if verbose:
+                print("Initial point was feasible; solving...")
         if not self.sdp.feasible(self.y):
             raise Exception("No feasible initial point found")
 
