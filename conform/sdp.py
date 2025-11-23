@@ -43,19 +43,20 @@ def _munpack(v):
     return M
 
 class SemidefiniteProgram:
-    def __init__(self, M0, m, c):
+    def __init__(self, M0, m, c, const=0):
         self.K = len(m)
         assert len(c) == self.K
         self.N = M0.shape[0]
         self.M0 = np.array(M0)
         self.m = np.array(m)
         self.c = np.array(c)
+        self.const = const
 
     def initial(self):
         return np.zeros((self.K,))
 
     @staticmethod
-    def by_constraints(C, A, b):
+    def by_constraints(C, A, b, const=0):
         N = list(A.values())[0].shape[0]
 
         m = []
@@ -87,7 +88,7 @@ class SemidefiniteProgram:
 
         M0v = svdVh[:rank].conj().T @ np.diag(1/svdS[:rank]) @ svdU[:,:rank].conj().T @ bv
         M0 = _hunpack(M0v)
-        return SemidefiniteProgram(M0, m, c)
+        return SemidefiniteProgram(M0, m, c, const)
 
     def _matrix(self, y):
         return self.M0 + np.einsum("iab,i->ab", self.m, y)
@@ -100,8 +101,8 @@ class SemidefiniteProgram:
     def objective(self, y, *, differentiate=False):
         r = np.dot(self.c, y)
         if differentiate:
-            return r, self.c
-        return r
+            return r + self.const, self.c
+        return r + self.const
 
     def barrier(self, y, *, differentiate=False):
         M = self._matrix(y)

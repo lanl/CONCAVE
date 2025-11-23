@@ -53,7 +53,7 @@ def parse_expression(expr):
     terms = list(map(Term.parse, term_strings))
     return terms
 
-def make_sdp(form):
+def make_sdp(form, *, verbose=False):
     if type(form) == bytes:
         form = form.decode()
     # Extract the two expressions.
@@ -64,8 +64,8 @@ def make_sdp(form):
     sos_end = form.index(';', sos_start)
     sos = parse_expression(form[sos_start:sos_end])
 
-    #print(ham)
-    #print(sos)
+    print(ham)
+    print(sos)
 
     N = 0
     ops = set()
@@ -97,11 +97,24 @@ def make_sdp(form):
         else:
             A[term.op][term.idx] += term.c
 
-    return SemidefiniteProgram.by_constraints(C, A, b)
+    if verbose:
+        print("C:")
+        print(C)
+        print()
+        for op in ops:
+            print(f"A[{op}]:")
+            print(A[op])
+            print()
 
-def solve(sdp):
+    return SemidefiniteProgram.by_constraints(C, A, b, c)
+
+def solve(sdp, *, verbose=False):
     ipm = InteriorPointSolver(sdp)
-    return ipm.solve()
+    obj = ipm.solve()
+    if verbose:
+        print(f"y: {ipm.y}")
+        print(f"M: {sdp._matrix(ipm.y)}")
+    return obj
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -112,8 +125,8 @@ if __name__ == '__main__':
         GLOBALS['minv'] = 1.0
         GLOBALS['alpha'] = 1.0
         form = subprocess.run(["form", "hydrogen.frm"], capture_output=True).stdout
-        sdp = make_sdp(form)
-        print(solve(sdp))
+        sdp = make_sdp(form, verbose=True)
+        print(solve(sdp, verbose=True))
     elif sys.argv[1] == 'dihydrogen':
         form = subprocess.run(["form", "dihydrogen.frm"], capture_output=True).stdout
         sdp = make_sdp(form)
