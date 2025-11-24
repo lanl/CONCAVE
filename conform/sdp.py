@@ -2,9 +2,15 @@
 
 from functools import partial
 import itertools
+import sys
 
 import numpy as np
 import numpy.random as nr
+
+SLACK = 1e-3
+
+if SLACK != 0:
+    print("Warning: non-zero slack in use!", file=sys.stderr)
 
 # A packing/unpacking of Hermitian matrices, which preserves the inner product.
 def _hpack(M):
@@ -91,7 +97,7 @@ class SemidefiniteProgram:
         return SemidefiniteProgram(M0, m, c, const)
 
     def _matrix(self, y):
-        return self.M0 + np.einsum("iab,i->ab", self.m, y)
+        return self.M0 + np.einsum("iab,i->ab", self.m, y) + SLACK*np.identity(self.N)
 
     def feasible(self, y):
         M = self._matrix(y)
