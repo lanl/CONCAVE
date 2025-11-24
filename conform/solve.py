@@ -137,7 +137,9 @@ if __name__ == '__main__':
         sdp = make_sdp(form)
         print(solve(sdp, verbose=True))
     elif sys.argv[1] == 'dihydrogen':
-        R = 0.0
+        # TODO it is possible for there to be an ``emergent'' affine
+        # constraint... how to deal with this?
+        R = 1.0
         GLOBALS['m'] = 1.0
         GLOBALS['minv'] = 1.0
         GLOBALS['alpha'] = 1.0
