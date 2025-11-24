@@ -35,15 +35,9 @@ set opset : px,py,pz,x,y,z,q;
 
 Function M;
 
-CommuteInSet {x,y,z,q}, {px,py,pz};
-CommuteInSet {x,py}, {x,pz};
-CommuteInSet {y,px}, {y,pz};
-CommuteInSet {z,px}, {z,py};
-
 * Hamiltonian and SOS ansatz
 Local hamiltonian = (px^2 + py^2 + pz^2)/(2*m) - alpha*q;
 #call sos('GENERATORS')
-*#call generators('GENERATORS')
 
 * Multiple arguments to conj(): addition.
 SplitArg conj;
@@ -66,13 +60,31 @@ id conj(pz) = pz;
 
 * Perform commutations.
 repeat;
+* Trivial commutations
+id y*x = x*y;
+id z*x = x*z;
+id z*y = y*z;
+id py*px = px*py;
+id pz*px = px*pz;
+id pz*py = py*pz;
+id px*y = y*px;
+id px*z = z*px;
+id py*x = x*py;
+id py*z = z*py;
+id pz*x = x*pz;
+id pz*y = y*pz;
+id q*x = x*q;
+id q*y = y*q;
+id q*z = z*q;
+
+* Nontrivial commutations
 id px*q = q*px + i_ * x * q^3;
 id py*q = q*py + i_ * y * q^3;
 id pz*q = q*pz + i_ * z * q^3;
 id px*x = x*px - i_;
 id py*y = y*py - i_;
 id pz*z = z*pz - i_;
-id q^2*z^2 = 1 - (x^2 + y^2)*q^2;
+id z^2*q^2 = 1 - (x^2 + y^2)*q^2;
 endrepeat;
 
 * Collect into dummy functions

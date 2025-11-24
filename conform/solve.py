@@ -71,6 +71,15 @@ def make_sdp(form, *, verbose=False):
         ops.add(term.op)
     N += 1
 
+    # Check that there are no duplicates in ops. This is a symptom of a very
+    # common sort of error in the underlying computer algebra.
+    for op1 in ops:
+        for op2 in ops:
+            s1 = sorted(op1.split(','))
+            s2 = sorted(op2.split(','))
+            if op1 != op2 and s1 == s2:
+                raise Exception(f"Duplicate found: {op1} and {op2}")
+
     c = 0.0
     C = np.zeros((N,N), dtype=np.complex128)
     A = {}
