@@ -1,7 +1,9 @@
-#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q2"
-*#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1*q2"
-*#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1*q2,q1^2,q2^2,px*x,px*y,px*z,py*x,py*y,py*z,pz*x,pz*y,pz*z,px*q1,py*q1,pz*q1,px*q2,py*q2,pz*q2"
-*#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1*q2,q1^2,q2^2,px*x,px*y,px*z,py*x,py*y,py*z,pz*x,pz*y,pz*z,px*q1,py*q1,pz*q1,px*q2,py*q2,pz*q2,px^2,py^2,pz^2,x^2,y^2,z^2,x^2*q1,y^2*q1,z^2*q1,x^2*q2,y^2*q2,z^2*q2"
+*#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q2"
+*#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1*q2,q1,q2"
+#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1,q2"
+#redefine GENERATORS "'GENERATORS',x,y,z,x^2,y^2,z^2,x^2*q1,x^2*q2,y^2*q1,y^2*q2,z^2*q1,z^2*q2,x^3*q1,x^3*q2,y^3*q1,y^3*q2,z^3*q1,z^3*q2,q1*q2,q1^2,q2^2"
+#redefine GENERATORS "'GENERATORS',px*q1,py*q1,pz*q1,px*q2,py*q2,pz*q2"
+*#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1,q2,q1*q2,q1^2,q2^2,px*x,px*y,px*z,py*x,py*y,py*z,pz*x,pz*y,pz*z,px*q1,py*q1,pz*q1,px*q2,py*q2,pz*q2,px^2,py^2,pz^2,x^2,y^2,z^2,x^2*q1,y^2*q1,z^2*q1,x^2*q2,y^2*q2,z^2*q2"
 #-
 
 #procedure sos(?ops)
@@ -97,6 +99,7 @@ id py*q2 = q2*py + i_ * y * q2^3;
 id pz*q2 = q2*pz + i_ * z * q2^3;
 id z^2*q1^2 = 1 - (x^2 + y^2)*q1^2;
 id z^2*q2^2 = 1 - ((x-R)^2 + y^2)*q2^2;
+id z^2*q1*q2^2 = (1 - ((x-R)^2 + y^2)*q2^2)*q1;
 endrepeat;
 
 * Collect into dummy functions

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import argparse
 import re
 import subprocess
 import sys
@@ -146,6 +147,7 @@ if __name__ == '__main__':
         GLOBALS['R'] = R
         form = subprocess.run(["form", "dihydrogen.frm"], capture_output=True).stdout
         sdp = make_sdp(form)
+        print(f"Built SDP: K={sdp.K}  N={sdp.N}")
         print(solve(sdp, verbose=True))
     else:
         print(f'Unknown problem: {sys.argv[1]}')

@@ -119,7 +119,7 @@ class SemidefiniteProgram:
         if differentiate:
             Minv = np.linalg.inv(M)
             g = np.einsum("ij,aji->a", Minv, self.m).real
-            h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m).real
+            h = -np.einsum("ij,ajk,kl,bli->ab", Minv, self.m, Minv, self.m, optimize=True).real
             return -ld, -g, -h
         return -ld
 
@@ -150,6 +150,8 @@ class _Phase1Program:
 
     def barrier(self, y, *, differentiate=False):
         s, y = y[0], y[1:]
+        R = 1e-2
+        reg = R * np.sum(y*y)/2
         M = self.sdp._matrix(y)
         M += s*np.identity(self.sdp.N)
         vs = np.linalg.eigvalsh(M)
@@ -169,12 +171,18 @@ class _Phase1Program:
             h[0,0] = -np.einsum("ij,ji", Minv, Minv).real
             h[0,1:] = -np.einsum("ij,ajk,ki->a", Minv, self.sdp.m, Minv, optimize=True).real
             h[1:,0] = h[0,1:]
-            return -ld, -g, -h
+
+            r = -ld+reg
+            g = -g
+            g[1:] += R*y
+            h = -h
+            h[1:,1:] += R*np.identity(self.sdp.K)
+            return r, g, h
         if neg:
             return np.inf
         ld = np.sum(np.log(vs).real)
-        # TODO the logarithm is unbounded above...
-        return -ld
+        # TODO logarithm unbounded above... why is the regulator necessary?
+        return -ld + reg
 
 def newton(loss, y, t, *, maxiter=1000):
     K = len(y)
@@ -207,7 +215,7 @@ def newton(loss, y, t, *, maxiter=1000):
 
         niter += 1
 
-    return y
+    return y, niter
 
 class InteriorPointSolver:
     def __init__(self, sdp):
@@ -240,7 +248,7 @@ class InteriorPointSolver:
             bar = self.sdp.barrier(y)
             return obj + bar/t
 
-        t = 1e-2
+        t = 1e-3
         mu = 2.0
         eps = 1e-10
 
@@ -249,8 +257,8 @@ class InteriorPointSolver:
                 print(f"{t} ", end='', flush=True)
             # Center
             t = mu*t
-            self.y = newton(loss, self.y, t, maxiter=100)
+            self.y, niter = newton(loss, self.y, t, maxiter=300)
             if verbose:
-                print(f"{self.sdp.objective(self.y)} {loss(self.y,t)}", flush=True)
+                print(f"{self.sdp.objective(self.y)} {loss(self.y,t)} {niter}", flush=True)
         return self.sdp.objective(self.y)
 
