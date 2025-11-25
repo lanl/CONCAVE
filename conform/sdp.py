@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import numpy.random as nr
 
-SLACK = 1e-3
+SLACK = 1e-5
 
 if SLACK != 0:
     print("Warning: non-zero slack in use!", file=sys.stderr)
