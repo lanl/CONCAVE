@@ -1,11 +1,19 @@
-*#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q2"
-*#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1*q2,q1,q2"
-#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1,q2"
-#redefine GENERATORS "'GENERATORS',x,y,z,x^2,y^2,z^2,x^2*q1,x^2*q2,y^2*q1,y^2*q2,z^2*q1,z^2*q2,x^3*q1,x^3*q2,y^3*q1,y^3*q2,z^3*q1,z^3*q2,q1*q2,q1^2,q2^2"
-#redefine GENERATORS "'GENERATORS',px*x,py*y,pz*z,px*y,px*z,py*x,py*z,pz*x,pz*y"
-#redefine GENERATORS "'GENERATORS',px*q1,py*q1,pz*q1,px*q2,py*q2,pz*q2"
-#redefine GENERATORS "'GENERATORS',px^2,py^2,pz^2,px*py,px*pz,py*pz"
-*#define GENERATORS "px,py,pz,px^2,py^2,pz^2,x,y,z,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1,q2,q1*q2,q1^2,q2^2,px*x,px*y,px*z,py*x,py*y,py*z,pz*x,pz*y,pz*z,px*q1,py*q1,pz*q1,px*q2,py*q2,pz*q2,px^2,py^2,pz^2,x^2,y^2,z^2,x^2*q1,y^2*q1,z^2*q1,x^2*q2,y^2*q2,z^2*q2"
+#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q2"
+#redefine GENERATORS "'GENERATORS',px*px,px*py,px*pz,py*py,py*pz,pz*pz"
+#redefine GENERATORS "'GENERATORS',x*x*q1^2,x*y*q1^2,x*z*q1^2,y*y*q1^2,y*z*q1^2,z*z*q1^2"
+#redefine GENERATORS "'GENERATORS',x*x*q2^2,x*y*q2^2,x*z*q2^2,y*y*q2^2,y*z*q2^2,z*z*q2^2"
+#redefine GENERATORS "'GENERATORS',x*x*q1*q2,x*y*q1*q2,x*z*q1*q2,y*y*q1*q2,y*z*q1*q2,z*z*q1*q2"
+#redefine GENERATORS "'GENERATORS',x*q1*q2,y*q1*q2,z*q1*q2,x*q2^2,y*q2^2,z*q2^2"
+
+*#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1,q2"
+*#redefine GENERATORS "'GENERATORS',x,y,z,x^2,y^2,z^2,x*y,x*z,y*z"
+*#redefine GENERATORS "'GENERATORS',x^2*q1,x^2*q2,y^2*q1,y^2*q2,z^2*q1,z^2*q2"
+*#redefine GENERATORS "'GENERATORS',x^3*q1,x^3*q2,y^3*q1,y^3*q2,z^3*q1,z^3*q2,q1*q2,q1^2,q2^2"
+*#redefine GENERATORS "'GENERATORS',px*x,py*y,pz*z,px*y,px*z,py*x,py*z,pz*x,pz*y"
+*#redefine GENERATORS "'GENERATORS',px*q1,py*q1,pz*q1,px*q2,py*q2,pz*q2"
+*#redefine GENERATORS "'GENERATORS',x*y,x*z,y*z"
+*#redefine GENERATORS "'GENERATORS',px^2,py^2,pz^2,px*py,px*pz,py*pz"
+*#redefine GENERATORS "'GENERATORS',q1^3,q1^2*q2,q1*q2^2,q2^3"
 #-
 
 #procedure sos(?ops)

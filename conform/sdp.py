@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import numpy.random as nr
 
-SLACK = 1e-5
+SLACK = 1e-4
 
 if SLACK != 0:
     print("Warning: non-zero slack in use!", file=sys.stderr)
@@ -50,6 +50,7 @@ def _munpack(v):
 
 class SemidefiniteProgram:
     def __init__(self, M0, m, c, const=0):
+        M0, m, c = self._purify(M0, m)
         self.K = len(m)
         assert len(c) == self.K
         self.N = M0.shape[0]
@@ -57,6 +58,10 @@ class SemidefiniteProgram:
         self.m = np.array(m)
         self.c = np.array(c)
         self.const = const
+
+    def _purify(M0, m, c):
+        # TODO
+        return M0, m, c
 
     def initial(self):
         return np.zeros((self.K,))
