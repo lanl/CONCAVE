@@ -26,8 +26,6 @@ Function conj;
 
 Functions oprod;
 
-Tensor c;
-
 Functions px,py,pz;
 Functions x,y,z;
 Functions q;
