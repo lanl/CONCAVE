@@ -149,6 +149,11 @@ if __name__ == '__main__':
         sdp = make_sdp(form)
         print(f"Built SDP: K={sdp.K}  N={sdp.N}")
         print(solve(sdp, verbose=True))
+    elif sys.argv[1] == 'neutrons':
+        form = subprocess.run(["form", "neutrons.frm"], capture_output=True).stdout
+        sdp = make_sdp(form)
+        print(f"Built SDP: K={sdp.K}  N={sdp.N}")
+        print(solve(sdp, verbose=True))
     else:
         print(f'Unknown problem: {sys.argv[1]}')
         sys.exit(1)

@@ -1,5 +1,7 @@
 #-
 
+* TODO impose equations of motion, somehow
+
 #procedure sos(?ops)
 #define sos ""
 #define i "0"
@@ -8,7 +10,7 @@
 #redefine j "0"
 #do opj = {'?ops'}
 #redefine sos "'sos' + M('i','j') * conj('opi') * 'opj'"
-* TODO do the ground-state constraints too
+#redefine sos "'sos' + G('i','j') * conj('opi') * (hamiltonian*'opj' - 'opj'*hamiltonian)"
 #redefine j "{'j'+1}"
 #enddo
 #redefine i "{'i'+1}"
@@ -16,15 +18,31 @@
 Local sos = 'sos';
 #endprocedure
 
+#procedure hamiltonian(L)
+#define ham ""
+#do x = 1,'L'
+#do y = 1,'L'
+#do z = 1,'L'
+#redefine ham "'ham' + {'x'*'y'}"
+#enddo
+#enddo
+#enddo
+Local hamiltonian = 'ham';
+#endprocedure
+
 Symbols O1,O2;
 Functions Op;
 Indices i,j,k,l;
 Functions conj, oprod;
 
+Function psi,psidag;
+set opset : psi,psidag;
+
 Commuting M;
 Commuting G;
 
-set opset : ;
+#call hamiltonian(3)
+*#call sos('GENERATORS')
 
 * Multiple arguments to conj(): addition.
 SplitArg conj;
@@ -41,9 +59,14 @@ repeat id Op?opset = oprod(Op);
 repeat id oprod(?O1)*oprod(?O2) = oprod(?O1,?O2);
 
 * Conjugate operators
+id conj(psi) = psidag;
+id conj(psidag) = psi;
 
 * Perform commutations.
 repeat;
+* Trivial commutations
+
+* Nontrivial commutations
 endrepeat;
 
 Print +s;
