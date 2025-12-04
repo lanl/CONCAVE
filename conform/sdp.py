@@ -50,7 +50,7 @@ def _munpack(v):
 
 class SemidefiniteProgram:
     def __init__(self, M0, m, c, const=0):
-        #M0, m, c = self._purify(M0, m, c)
+        #M0, m, c = self._reduce(M0, m, c)
         self.K = len(m)
         assert len(c) == self.K
         self.M0 = np.array(M0)
@@ -60,7 +60,7 @@ class SemidefiniteProgram:
         self.const = const
 
     @staticmethod
-    def _purify(M0, m, c):
+    def _reduce(M0, m, c):
         M0 = np.array(M0)
         m = np.array(m)
         c = np.array(c)
