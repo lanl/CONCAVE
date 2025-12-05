@@ -51,7 +51,7 @@ def parse_expression(expr):
     terms = list(map(Term.parse, term_strings))
     return terms
 
-def make_sdp(form, *, verbose=False):
+def parse_form(form):
     if type(form) == bytes:
         form = form.decode()
     # Extract the two expressions.
@@ -61,6 +61,45 @@ def make_sdp(form, *, verbose=False):
     sos_start = form.index('sos =') + len('sos =')
     sos_end = form.index(';', sos_start)
     sos = parse_expression(form[sos_start:sos_end])
+    return ham, sos
+
+def make_primal_sdp(form, *, verbose=False):
+    ham, sos = parse_form(form)
+    N = 0
+    ops = dict()
+    for term in sos:
+        N = max(N, *term.idx)
+        if term.op != '' and term.op not in ops:
+            k = len(ops)
+            ops[term.op] = k
+    N += 1
+    K = len(ops)
+
+    C = np.zeros((N,N), dtype=np.complex128)
+    M0 = np.zeros((N,N), dtype=np.complex128)
+    m = np.zeros((K,N,N), dtype=np.complex128)
+    c = np.zeros(K, dtype=np.float64)
+
+    for term in sos:
+        if term.op == '':
+            M0[term.idx] += term.c
+            continue
+        k = ops[term.op]
+        m[k,*term.idx] += term.c
+
+    const = 0
+    for term in ham:
+        op = term.op
+        if op == '':
+            const += term.c
+            continue
+        c[ops[op]] += term.c
+
+    return SemidefiniteProgram(M0, m, c, const)
+
+
+def make_sos_sdp(form, *, verbose=False):
+    ham, sos = parse_form(form)
 
     #print(ham)
     #print(sos)
@@ -104,7 +143,7 @@ def make_sdp(form, *, verbose=False):
         else:
             A[term.op][term.idx] += term.c
 
-    if verbose:
+    if verbose and False:
         print("C:")
         print(C)
         print()
@@ -119,7 +158,7 @@ def make_sdp(form, *, verbose=False):
 def solve(sdp, *, verbose=False):
     ipm = InteriorPointSolver(sdp)
     obj = ipm.solve(verbose=verbose)
-    if verbose:
+    if verbose and False:
         print(f"y: {ipm.y}")
         M = sdp._matrix(ipm.y)
         print(f"M: {M}")
@@ -135,7 +174,7 @@ if __name__ == '__main__':
         GLOBALS['minv'] = 1.0
         GLOBALS['alpha'] = 1.0
         form = subprocess.run(["form", "hydrogen.frm"], capture_output=True).stdout
-        sdp = make_sdp(form)
+        sdp = make_sos_sdp(form)
         print(solve(sdp, verbose=True))
     elif sys.argv[1] == 'dihydrogen':
         # TODO it is possible for there to be an ``emergent'' affine
@@ -146,12 +185,12 @@ if __name__ == '__main__':
         GLOBALS['alpha'] = 1.0
         GLOBALS['R'] = R
         form = subprocess.run(["form", "dihydrogen.frm"], capture_output=True).stdout
-        sdp = make_sdp(form)
+        sdp = make_primal_sdp(form)
         print(f"Built SDP: K={sdp.K}  N={sdp.N}")
         print(solve(sdp, verbose=True))
     elif sys.argv[1] == 'neutrons':
         form = subprocess.run(["form", "neutrons.frm"], capture_output=True).stdout
-        sdp = make_sdp(form)
+        sdp = make_sos_sdp(form)
         print(f"Built SDP: K={sdp.K}  N={sdp.N}")
         print(solve(sdp, verbose=True))
     else:

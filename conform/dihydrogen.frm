@@ -1,9 +1,11 @@
 #define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q2"
-#redefine GENERATORS "'GENERATORS',px*px,px*py,px*pz,py*py,py*pz,pz*pz"
-#redefine GENERATORS "'GENERATORS',x*x*q1^2,x*y*q1^2,x*z*q1^2,y*y*q1^2,y*z*q1^2,z*z*q1^2"
-#redefine GENERATORS "'GENERATORS',x*x*q2^2,x*y*q2^2,x*z*q2^2,y*y*q2^2,y*z*q2^2,z*z*q2^2"
-#redefine GENERATORS "'GENERATORS',x*x*q1*q2,x*y*q1*q2,x*z*q1*q2,y*y*q1*q2,y*z*q1*q2,z*z*q1*q2"
-#redefine GENERATORS "'GENERATORS',x*q1*q2,y*q1*q2,z*q1*q2,x*q2^2,y*q2^2,z*q2^2"
+
+*#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q2"
+*#redefine GENERATORS "'GENERATORS',px*px,px*py,px*pz,py*py,py*pz,pz*pz"
+*#redefine GENERATORS "'GENERATORS',x*x*q1^2,x*y*q1^2,x*z*q1^2,y*y*q1^2,y*z*q1^2,z*z*q1^2"
+*#redefine GENERATORS "'GENERATORS',x*x*q2^2,x*y*q2^2,x*z*q2^2,y*y*q2^2,y*z*q2^2,z*z*q2^2"
+*#redefine GENERATORS "'GENERATORS',x*x*q1*q2,x*y*q1*q2,x*z*q1*q2,y*y*q1*q2,y*z*q1*q2,z*z*q1*q2"
+*#redefine GENERATORS "'GENERATORS',x*q1*q2,y*q1*q2,z*q1*q2,x*q2^2,y*q2^2,z*q2^2"
 
 *#define GENERATORS "px,py,pz,x*q1,y*q1,z*q1,x*q2,y*q2,z*q2,q1,q2"
 *#redefine GENERATORS "'GENERATORS',x,y,z,x^2,y^2,z^2,x*y,x*z,y*z"
@@ -65,6 +67,7 @@ id conj(i_) = -i_;
 id conj(R) = R;
 
 * Conjugate operators
+id conj(1) = 1;
 id conj(x) = x;
 id conj(y) = y;
 id conj(z) = z;
