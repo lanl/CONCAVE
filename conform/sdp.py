@@ -204,7 +204,13 @@ def newton(loss, y, t, *, maxiter=1000):
     niter = 0
     while niter < maxiter:
         v, g, h = loss(y, t, differentiate=True)
-        h += 1e-8 * np.identity(K)
+
+        evals = np.linalg.eigvalsh(h)
+        sh = 0
+        if np.min(evals) < 0:
+            sh += np.abs(np.min(evals))
+        sh += np.max(evals)*1e-8
+        h += sh * np.identity(K)
 
         dy = -np.linalg.solve(h,g)
 
@@ -265,7 +271,7 @@ class InteriorPointSolver:
 
         t = 1e-3
         mu = 2.0
-        eps = 1e-10
+        eps = 1e-8
 
         while t < 1/eps:
             if verbose:

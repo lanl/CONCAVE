@@ -95,6 +95,17 @@ def make_primal_sdp(form, *, verbose=False):
             continue
         c[ops[op]] += term.c
 
+    print(M0)
+    for (k,op) in enumerate(ops):
+        print()
+        print(k)
+        print(op)
+        print(c[k])
+        print(m[k,:,:])
+
+    # TODO among other things, m is not hermitian
+    exit(0)
+
     return SemidefiniteProgram(M0, m, c, const)
 
 
